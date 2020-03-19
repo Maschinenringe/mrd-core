@@ -2156,7 +2156,7 @@
     /**
      * @template T
      */
-    var /**
+    var   /**
      * @template T
      */
     ReadonlyRestHandler = /** @class */ (function () {
@@ -5037,6 +5037,7 @@
     exports.ItemStore = ItemStore;
     exports.ObservableValue = ObservableValue;
     exports.REGEX = REGEX;
+    exports.ReadonlyRestHandler = ReadonlyRestHandler;
     exports.RestHandler = RestHandler;
     exports.SubscriptionHandler = SubscriptionHandler;
     exports.SubscriptionManager = SubscriptionManager;
