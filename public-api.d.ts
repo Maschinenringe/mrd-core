@@ -41,3 +41,4 @@ export * from './lib/abstract/http/abstract-cached-restservice';
 export * from './lib/abstract/http/abstract-readonly-cached-restservice';
 export * from './lib/abstract/util/abstract-entity-resolver';
 export * from './lib/impl/util/timestamp-item-store';
+export * from './lib/impl/http/readony-rest-handler';
