@@ -1895,6 +1895,16 @@
             enumerable: true,
             configurable: true
         });
+        Object.defineProperty(AccessableFormArray.prototype, "entries", {
+            get: /**
+             * @return {?}
+             */
+            function () {
+                return this.entries$;
+            },
+            enumerable: true,
+            configurable: true
+        });
         /**
          * @return {?}
          */

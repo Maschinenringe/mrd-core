@@ -13,6 +13,7 @@ export declare abstract class AccessableFormArray<TModel> implements IAccessable
     readonly touched: boolean;
     readonly valid: boolean;
     readonly value: TModel[];
+    readonly entries: IAccessableFormControl<any, TModel>[];
     disable(): AccessableFormArray<TModel>;
     enable(): AccessableFormArray<TModel>;
     markAsDirty(): AccessableFormArray<TModel>;
