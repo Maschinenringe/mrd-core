@@ -1276,6 +1276,12 @@ class AccessableFormArray {
     /**
      * @return {?}
      */
+    get entries() {
+        return this.entries$;
+    }
+    /**
+     * @return {?}
+     */
     disable() {
         this.control.disable();
         return this;
