@@ -1,0 +1,26 @@
+{
+  "name": "mrd-core",
+  "version": "0.0.1",
+  "peerDependencies": {
+    "@angular/common": "^8.2.14",
+    "@angular/core": "^8.2.14",
+    "@angular/router": "~8.2.13",
+    "moment": "^2.24.0"
+  },
+  "build": {
+    "preserveSymlinks": true
+  },
+  "main": "bundles/mrd-core.umd.js",
+  "module": "fesm5/mrd-core.js",
+  "es2015": "fesm2015/mrd-core.js",
+  "esm5": "esm5/mrd-core.js",
+  "esm2015": "esm2015/mrd-core.js",
+  "fesm5": "fesm5/mrd-core.js",
+  "fesm2015": "fesm2015/mrd-core.js",
+  "typings": "mrd-core.d.ts",
+  "metadata": "mrd-core.metadata.json",
+  "sideEffects": false,
+  "dependencies": {
+    "tslib": "^1.9.0"
+  }
+}
