@@ -2049,18 +2049,20 @@
             var e_8, _a;
             this.entries$ = [];
             this.control.reset([]);
-            try {
-                for (var models_1 = __values(models), models_1_1 = models_1.next(); !models_1_1.done; models_1_1 = models_1.next()) {
-                    var model = models_1_1.value;
-                    this.push(model);
-                }
-            }
-            catch (e_8_1) { e_8 = { error: e_8_1 }; }
-            finally {
+            if (Util.isDefined(models) && underscore.isArray(models)) {
                 try {
-                    if (models_1_1 && !models_1_1.done && (_a = models_1.return)) _a.call(models_1);
+                    for (var models_1 = __values(models), models_1_1 = models_1.next(); !models_1_1.done; models_1_1 = models_1.next()) {
+                        var model = models_1_1.value;
+                        this.push(model);
+                    }
                 }
-                finally { if (e_8) throw e_8.error; }
+                catch (e_8_1) { e_8 = { error: e_8_1 }; }
+                finally {
+                    try {
+                        if (models_1_1 && !models_1_1.done && (_a = models_1.return)) _a.call(models_1);
+                    }
+                    finally { if (e_8) throw e_8.error; }
+                }
             }
             return this;
         };

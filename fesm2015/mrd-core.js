@@ -1,5 +1,5 @@
 import { take, finalize, tap, takeUntil, switchMap, catchError } from 'rxjs/operators';
-import { isFunction, isEmpty, each, sortBy, isDate, isNumber, isString, isBoolean, map, find, mapObject, reject, isUndefined, isArray, all, extend, clone } from 'underscore';
+import { isFunction, isEmpty, each, sortBy, isDate, isNumber, isString, isBoolean, map, find, mapObject, reject, isArray, isUndefined, all, extend, clone } from 'underscore';
 import { Subject, Observable, forkJoin, of } from 'rxjs';
 import { FormControl, FormGroup, FormArray } from '@angular/forms';
 import { isMoment } from 'moment';
@@ -1345,8 +1345,10 @@ class AccessableFormArray {
     reset(models) {
         this.entries$ = [];
         this.control.reset([]);
-        for (const model of models) {
-            this.push(model);
+        if (Util.isDefined(models) && isArray(models)) {
+            for (const model of models) {
+                this.push(model);
+            }
         }
         return this;
     }
