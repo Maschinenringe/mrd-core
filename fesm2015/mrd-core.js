@@ -1,5 +1,5 @@
 import { take, finalize, tap, takeUntil, switchMap, catchError } from 'rxjs/operators';
-import { isFunction, isEmpty, each, sortBy, isDate, isNumber, isString, isBoolean, map, find, mapObject, reject, isArray, isUndefined, all, extend, clone } from 'underscore';
+import { isFunction, isEmpty, each, sortBy, isDate, isNumber, isString, isBoolean, map, find, mapObject, reject, isArray, compact, isUndefined, all, extend, clone } from 'underscore';
 import { Subject, Observable, forkJoin, of } from 'rxjs';
 import { FormControl, FormGroup, FormArray } from '@angular/forms';
 import { isMoment } from 'moment';
@@ -1193,6 +1193,10 @@ if (false) {
  * @template TModel
  */
 class AccessableFormArray {
+    constructor() {
+        this.validators$ = [];
+        this.required$ = false;
+    }
     /**
      * @param {?} type
      * @return {?}
@@ -1235,6 +1239,41 @@ class AccessableFormArray {
         markAsUsed ? this.markAsUsed() : this.markAsUnused();
     }
     /**
+     * @param {?} validators
+     * @return {?}
+     */
+    validateWith(validators) {
+        if (!Util.isDefined(validators)) {
+            validators = [];
+        }
+        if (isArray(validators)) {
+            this.validators$ = validators;
+        }
+        this.control.setValidators(map(validators, (/**
+         * @param {?} v
+         * @return {?}
+         */
+        (v) => v.validator())));
+        this.required$ = false;
+        each(this.validators$, (/**
+         * @param {?} v
+         * @return {?}
+         */
+        (v) => {
+            if (v instanceof ValidatorRequired) {
+                this.required$ = true;
+            }
+        }));
+        this.control.updateValueAndValidity();
+        return this;
+    }
+    /**
+     * @return {?}
+     */
+    clearValidators() {
+        this.validators$ = [];
+    }
+    /**
      * @param {?} value
      * @return {?}
      */
@@ -1243,6 +1282,45 @@ class AccessableFormArray {
         const validation = new this.type();
         validation.reset(value);
         return validation;
+    }
+    /**
+     * @return {?}
+     */
+    get errors() {
+        return compact(map(this.validators$, (/**
+         * @param {?} e
+         * @return {?}
+         */
+        (e) => {
+            if (e.hasError) {
+                return e.error;
+            }
+            return null;
+        })));
+    }
+    /**
+     * @return {?}
+     */
+    get error() {
+        return find(this.validators$, (/**
+         * @param {?} v
+         * @return {?}
+         */
+        (v) => {
+            return v.hasError;
+        }));
+    }
+    /**
+     * @return {?}
+     */
+    get validators() {
+        return this.validators$;
+    }
+    /**
+     * @return {?}
+     */
+    get required() {
+        return this.required$;
     }
     /**
      * @return {?}
@@ -1354,10 +1432,20 @@ class AccessableFormArray {
     }
 }
 if (false) {
+    /**
+     * @type {?}
+     * @private
+     */
+    AccessableFormArray.prototype.validators$;
     /** @type {?} */
     AccessableFormArray.prototype.control;
     /** @type {?} */
     AccessableFormArray.prototype.type;
+    /**
+     * @type {?}
+     * @private
+     */
+    AccessableFormArray.prototype.required$;
     /**
      * @type {?}
      * @private

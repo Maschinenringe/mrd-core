@@ -1,6 +1,6 @@
 import { __spread, __values, __extends } from 'tslib';
 import { take, finalize, tap, takeUntil, switchMap, catchError } from 'rxjs/operators';
-import { isFunction, isEmpty, each, sortBy, isDate, isNumber, isString, isBoolean, map, find, mapObject, reject, isArray, isUndefined, all, extend, clone } from 'underscore';
+import { isFunction, isEmpty, each, sortBy, isDate, isNumber, isString, isBoolean, map, find, mapObject, reject, isArray, compact, isUndefined, all, extend, clone } from 'underscore';
 import { Subject, Observable, forkJoin, of } from 'rxjs';
 import { FormControl, FormGroup, FormArray } from '@angular/forms';
 import { isMoment } from 'moment';
@@ -1564,6 +1564,8 @@ var  /**
  */
 AccessableFormArray = /** @class */ (function () {
     function AccessableFormArray() {
+        this.validators$ = [];
+        this.required$ = false;
     }
     /**
      * @param {?} type
@@ -1630,6 +1632,49 @@ AccessableFormArray = /** @class */ (function () {
         markAsUsed ? this.markAsUsed() : this.markAsUnused();
     };
     /**
+     * @param {?} validators
+     * @return {?}
+     */
+    AccessableFormArray.prototype.validateWith = /**
+     * @param {?} validators
+     * @return {?}
+     */
+    function (validators) {
+        var _this = this;
+        if (!Util.isDefined(validators)) {
+            validators = [];
+        }
+        if (isArray(validators)) {
+            this.validators$ = validators;
+        }
+        this.control.setValidators(map(validators, (/**
+         * @param {?} v
+         * @return {?}
+         */
+        function (v) { return v.validator(); })));
+        this.required$ = false;
+        each(this.validators$, (/**
+         * @param {?} v
+         * @return {?}
+         */
+        function (v) {
+            if (v instanceof ValidatorRequired) {
+                _this.required$ = true;
+            }
+        }));
+        this.control.updateValueAndValidity();
+        return this;
+    };
+    /**
+     * @return {?}
+     */
+    AccessableFormArray.prototype.clearValidators = /**
+     * @return {?}
+     */
+    function () {
+        this.validators$ = [];
+    };
+    /**
      * @param {?} value
      * @return {?}
      */
@@ -1643,6 +1688,61 @@ AccessableFormArray = /** @class */ (function () {
         validation.reset(value);
         return validation;
     };
+    Object.defineProperty(AccessableFormArray.prototype, "errors", {
+        get: /**
+         * @return {?}
+         */
+        function () {
+            return compact(map(this.validators$, (/**
+             * @param {?} e
+             * @return {?}
+             */
+            function (e) {
+                if (e.hasError) {
+                    return e.error;
+                }
+                return null;
+            })));
+        },
+        enumerable: true,
+        configurable: true
+    });
+    Object.defineProperty(AccessableFormArray.prototype, "error", {
+        get: /**
+         * @return {?}
+         */
+        function () {
+            return find(this.validators$, (/**
+             * @param {?} v
+             * @return {?}
+             */
+            function (v) {
+                return v.hasError;
+            }));
+        },
+        enumerable: true,
+        configurable: true
+    });
+    Object.defineProperty(AccessableFormArray.prototype, "validators", {
+        get: /**
+         * @return {?}
+         */
+        function () {
+            return this.validators$;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    Object.defineProperty(AccessableFormArray.prototype, "required", {
+        get: /**
+         * @return {?}
+         */
+        function () {
+            return this.required$;
+        },
+        enumerable: true,
+        configurable: true
+    });
     Object.defineProperty(AccessableFormArray.prototype, "dirty", {
         get: /**
          * @return {?}
@@ -1873,10 +1973,20 @@ AccessableFormArray = /** @class */ (function () {
     return AccessableFormArray;
 }());
 if (false) {
+    /**
+     * @type {?}
+     * @private
+     */
+    AccessableFormArray.prototype.validators$;
     /** @type {?} */
     AccessableFormArray.prototype.control;
     /** @type {?} */
     AccessableFormArray.prototype.type;
+    /**
+     * @type {?}
+     * @private
+     */
+    AccessableFormArray.prototype.required$;
     /**
      * @type {?}
      * @private
