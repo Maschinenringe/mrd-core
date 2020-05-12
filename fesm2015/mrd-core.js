@@ -1164,13 +1164,27 @@ class AccessableFormGroup {
      * @return {?}
      */
     disable() {
-        return undefined;
+        this.control.disable();
+        return this;
     }
     /**
      * @return {?}
      */
     enable() {
-        return undefined;
+        this.control.enable();
+        return this;
+    }
+    /**
+     * @return {?}
+     */
+    get disabled() {
+        return this.control.disabled;
+    }
+    /**
+     * @return {?}
+     */
+    get enabled() {
+        return this.control.enabled;
     }
 }
 if (false) {

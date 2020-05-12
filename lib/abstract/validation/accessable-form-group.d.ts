@@ -16,4 +16,6 @@ export declare abstract class AccessableFormGroup<TFields, TModel extends object
     readonly touched: boolean;
     disable(): AccessableFormGroup<TFields, TModel>;
     enable(): AccessableFormGroup<TFields, TModel>;
+    readonly disabled: boolean;
+    readonly enabled: boolean;
 }

@@ -1526,7 +1526,8 @@ AccessableFormGroup = /** @class */ (function () {
      * @return {?}
      */
     function () {
-        return undefined;
+        this.control.disable();
+        return this;
     };
     /**
      * @return {?}
@@ -1535,8 +1536,29 @@ AccessableFormGroup = /** @class */ (function () {
      * @return {?}
      */
     function () {
-        return undefined;
+        this.control.enable();
+        return this;
     };
+    Object.defineProperty(AccessableFormGroup.prototype, "disabled", {
+        get: /**
+         * @return {?}
+         */
+        function () {
+            return this.control.disabled;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    Object.defineProperty(AccessableFormGroup.prototype, "enabled", {
+        get: /**
+         * @return {?}
+         */
+        function () {
+            return this.control.enabled;
+        },
+        enumerable: true,
+        configurable: true
+    });
     return AccessableFormGroup;
 }());
 if (false) {
