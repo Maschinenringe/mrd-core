@@ -3267,6 +3267,47 @@ HttpStatusCodes[HttpStatusCodes.NOT_ACCEPTABLE] = 'NOT_ACCEPTABLE';
 
 /**
  * @fileoverview added by tsickle
+ * Generated from: lib/enum/bundesland.enum.ts
+ * @suppress {checkTypes,constantProperty,extraRequire,missingOverride,missingReturn,unusedPrivateMembers,uselessCode} checked by tsc
+ */
+/** @enum {number} */
+var Bundesland = {
+    Baden_Wuertemberg: 1,
+    Bayern: 2,
+    Berlin: 3,
+    Brandenburg: 4,
+    Bremen: 5,
+    Hamburg: 6,
+    Hessen: 7,
+    Mecklenburg_Vorpommern: 8,
+    Niedersachsen: 9,
+    Nordrhein_Westfalen: 10,
+    Rheinland_Pfalz: 11,
+    Saarland: 12,
+    Sachsen: 13,
+    Sachsen_Anhalt: 14,
+    Schleswig_Holstein: 15,
+    Thueringen: 16,
+};
+Bundesland[Bundesland.Baden_Wuertemberg] = 'Baden_Wuertemberg';
+Bundesland[Bundesland.Bayern] = 'Bayern';
+Bundesland[Bundesland.Berlin] = 'Berlin';
+Bundesland[Bundesland.Brandenburg] = 'Brandenburg';
+Bundesland[Bundesland.Bremen] = 'Bremen';
+Bundesland[Bundesland.Hamburg] = 'Hamburg';
+Bundesland[Bundesland.Hessen] = 'Hessen';
+Bundesland[Bundesland.Mecklenburg_Vorpommern] = 'Mecklenburg_Vorpommern';
+Bundesland[Bundesland.Niedersachsen] = 'Niedersachsen';
+Bundesland[Bundesland.Nordrhein_Westfalen] = 'Nordrhein_Westfalen';
+Bundesland[Bundesland.Rheinland_Pfalz] = 'Rheinland_Pfalz';
+Bundesland[Bundesland.Saarland] = 'Saarland';
+Bundesland[Bundesland.Sachsen] = 'Sachsen';
+Bundesland[Bundesland.Sachsen_Anhalt] = 'Sachsen_Anhalt';
+Bundesland[Bundesland.Schleswig_Holstein] = 'Schleswig_Holstein';
+Bundesland[Bundesland.Thueringen] = 'Thueringen';
+
+/**
+ * @fileoverview added by tsickle
  * Generated from: lib/abstract/ui/base-push-strategy-object.ts
  * @suppress {checkTypes,constantProperty,extraRequire,missingOverride,missingReturn,unusedPrivateMembers,uselessCode} checked by tsc
  */
@@ -4840,5 +4881,5 @@ if (false) {
  * @suppress {checkTypes,constantProperty,extraRequire,missingOverride,missingReturn,unusedPrivateMembers,uselessCode} checked by tsc
  */
 
-export { AbstractActivationGuard, AbstractActivationQueuedGuard, AbstractCachedRestservice, AbstractEntityResolver, AbstractReadonlyCachedRestservice, AbstractReadonlyRestservice, AbstractResolver, AbstractRestservice, AbstractRouteConfiguration, AbstractStoredReadonlyRestservice, AbstractStoredRestservice, AccessableControlFactory, AccessableFormArray, AccessableFormControl, AccessableFormGroup, BaseObject, BasePushStrategyObject, BaseRootComponent, DeactivationHandler, HttpStatusCodes, ItemStore, ObservableValue, REGEX, ReadonlyRestHandler, RestHandler, SubscriptionHandler, SubscriptionManager, TimestampItemStore, TypeConverter, Util, ValidatorCustom, ValidatorEmail, ValidatorFixedValue, ValidatorFloat, ValidatorInteger, ValidatorPostalCode, ValidatorRequired, RestServiceObserver as ɵa, ReadonlyRestServiceObserver as ɵb };
+export { AbstractActivationGuard, AbstractActivationQueuedGuard, AbstractCachedRestservice, AbstractEntityResolver, AbstractReadonlyCachedRestservice, AbstractReadonlyRestservice, AbstractResolver, AbstractRestservice, AbstractRouteConfiguration, AbstractStoredReadonlyRestservice, AbstractStoredRestservice, AccessableControlFactory, AccessableFormArray, AccessableFormControl, AccessableFormGroup, BaseObject, BasePushStrategyObject, BaseRootComponent, Bundesland, DeactivationHandler, HttpStatusCodes, ItemStore, ObservableValue, REGEX, ReadonlyRestHandler, RestHandler, SubscriptionHandler, SubscriptionManager, TimestampItemStore, TypeConverter, Util, ValidatorCustom, ValidatorEmail, ValidatorFixedValue, ValidatorFloat, ValidatorInteger, ValidatorPostalCode, ValidatorRequired, RestServiceObserver as ɵa, ReadonlyRestServiceObserver as ɵb };
 //# sourceMappingURL=mrd-core.js.map

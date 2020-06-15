@@ -22,6 +22,7 @@ export * from './lib/impl/validation/validator-postal-code';
 export * from './lib/impl/validation/accessable-control-factory';
 export * from './lib/interface/validation/i-validator';
 export * from './lib/enum/http-status-codes';
+export * from './lib/enum/bundesland.enum';
 export * from './lib/abstract/ui/base-push-strategy-object';
 export * from './lib/impl/util/observable-value';
 export * from './lib/abstract/http/abstract-stored-readonly-restservice';
