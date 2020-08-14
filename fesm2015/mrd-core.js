@@ -954,6 +954,18 @@ class AccessableFormControl {
     /**
      * @return {?}
      */
+    blockControls() {
+        this.blocked$ = true;
+    }
+    /**
+     * @return {?}
+     */
+    unblockControls() {
+        this.blocked$ = false;
+    }
+    /**
+     * @return {?}
+     */
     get disabled() {
         return this.control.disabled;
     }
@@ -1003,6 +1015,32 @@ class AccessableFormControl {
     /**
      * @return {?}
      */
+    get valueChanges() {
+        return Observable.create((/**
+         * @param {?} observer
+         * @return {?}
+         */
+        (observer) => {
+            /** @type {?} */
+            const sub = this.control.valueChanges
+                .subscribe((/**
+             * @return {?}
+             */
+            () => {
+                if (!this.blocked) {
+                    observer.next(this.value);
+                }
+            }), null, (/**
+             * @return {?}
+             */
+            () => {
+                sub.unsubscribe();
+            }));
+        }));
+    }
+    /**
+     * @return {?}
+     */
     get required() {
         return this.required$;
     }
@@ -1017,6 +1055,12 @@ class AccessableFormControl {
      */
     get dirty() {
         return this.control.dirty;
+    }
+    /**
+     * @return {?}
+     */
+    get blocked() {
+        return this.blocked$;
     }
 }
 if (false) {
@@ -1036,6 +1080,11 @@ if (false) {
      * @private
      */
     AccessableFormControl.prototype.validators$;
+    /**
+     * @type {?}
+     * @private
+     */
+    AccessableFormControl.prototype.blocked$;
 }
 
 /**
@@ -1048,6 +1097,9 @@ if (false) {
  * @template TFields, TModel
  */
 class AccessableFormGroup {
+    constructor() {
+        this.changed$ = new Subject();
+    }
     /**
      * @param {?} fields
      * @return {?}
@@ -1108,9 +1160,10 @@ class AccessableFormGroup {
     }
     /**
      * @param {?} model
+     * @param {?=} propagateChanges
      * @return {?}
      */
-    reset(model) {
+    reset(model, propagateChanges = true) {
         if (!Util.isDefined(model)) {
             model = (/** @type {?} */ ({}));
         }
@@ -1120,6 +1173,9 @@ class AccessableFormGroup {
          * @return {?}
          */
         (field, key) => field.reset(model[key])));
+        if (propagateChanges) {
+            this.changed$.next();
+        }
         return this;
     }
     /**
@@ -1186,6 +1242,12 @@ class AccessableFormGroup {
     get enabled() {
         return this.control.enabled;
     }
+    /**
+     * @return {?}
+     */
+    get changed() {
+        return this.changed$.asObservable();
+    }
 }
 if (false) {
     /** @type {?} */
@@ -1195,6 +1257,11 @@ if (false) {
      * @private
      */
     AccessableFormGroup.prototype.fields$;
+    /**
+     * @type {?}
+     * @private
+     */
+    AccessableFormGroup.prototype.changed$;
 }
 
 /**

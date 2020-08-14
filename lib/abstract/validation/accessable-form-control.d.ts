@@ -1,12 +1,14 @@
 import { IValidator } from '../../interface/validation/i-validator';
 import { FormControl } from '@angular/forms';
 import { IAccessableFormControl } from '../../interface/validation/i-accessable-form-control';
+import { Observable } from 'rxjs';
 export declare class AccessableFormControl<TType = any> implements IAccessableFormControl<AccessableFormControl<TType>, TType> {
     control: FormControl;
     showAs: (value: any) => any;
     convertTo: (value: any) => any;
     private required$;
     private validators$;
+    private blocked$;
     initialize(formState?: any, validators?: IValidator[]): void;
     validateWith(validators?: IValidator[]): AccessableFormControl;
     setValue(value: any): AccessableFormControl;
@@ -17,12 +19,16 @@ export declare class AccessableFormControl<TType = any> implements IAccessableFo
     markAsTouched(): AccessableFormControl;
     disable(): AccessableFormControl;
     enable(): AccessableFormControl;
+    blockControls(): void;
+    unblockControls(): void;
     readonly disabled: boolean;
     readonly valid: boolean;
     readonly validators: IValidator[];
     readonly error: IValidator;
     value: any;
+    readonly valueChanges: Observable<any>;
     readonly required: boolean;
     readonly touched: boolean;
     readonly dirty: boolean;
+    readonly blocked: boolean;
 }

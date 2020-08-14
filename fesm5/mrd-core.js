@@ -1231,6 +1231,24 @@ AccessableFormControl = /** @class */ (function () {
         this.control.enable();
         return this;
     };
+    /**
+     * @return {?}
+     */
+    AccessableFormControl.prototype.blockControls = /**
+     * @return {?}
+     */
+    function () {
+        this.blocked$ = true;
+    };
+    /**
+     * @return {?}
+     */
+    AccessableFormControl.prototype.unblockControls = /**
+     * @return {?}
+     */
+    function () {
+        this.blocked$ = false;
+    };
     Object.defineProperty(AccessableFormControl.prototype, "disabled", {
         get: /**
          * @return {?}
@@ -1300,6 +1318,37 @@ AccessableFormControl = /** @class */ (function () {
         enumerable: true,
         configurable: true
     });
+    Object.defineProperty(AccessableFormControl.prototype, "valueChanges", {
+        get: /**
+         * @return {?}
+         */
+        function () {
+            var _this = this;
+            return Observable.create((/**
+             * @param {?} observer
+             * @return {?}
+             */
+            function (observer) {
+                /** @type {?} */
+                var sub = _this.control.valueChanges
+                    .subscribe((/**
+                 * @return {?}
+                 */
+                function () {
+                    if (!_this.blocked) {
+                        observer.next(_this.value);
+                    }
+                }), null, (/**
+                 * @return {?}
+                 */
+                function () {
+                    sub.unsubscribe();
+                }));
+            }));
+        },
+        enumerable: true,
+        configurable: true
+    });
     Object.defineProperty(AccessableFormControl.prototype, "required", {
         get: /**
          * @return {?}
@@ -1330,6 +1379,16 @@ AccessableFormControl = /** @class */ (function () {
         enumerable: true,
         configurable: true
     });
+    Object.defineProperty(AccessableFormControl.prototype, "blocked", {
+        get: /**
+         * @return {?}
+         */
+        function () {
+            return this.blocked$;
+        },
+        enumerable: true,
+        configurable: true
+    });
     return AccessableFormControl;
 }());
 if (false) {
@@ -1349,6 +1408,11 @@ if (false) {
      * @private
      */
     AccessableFormControl.prototype.validators$;
+    /**
+     * @type {?}
+     * @private
+     */
+    AccessableFormControl.prototype.blocked$;
 }
 
 /**
@@ -1366,6 +1430,7 @@ var  /**
  */
 AccessableFormGroup = /** @class */ (function () {
     function AccessableFormGroup() {
+        this.changed$ = new Subject();
     }
     /**
      * @param {?} fields
@@ -1443,13 +1508,16 @@ AccessableFormGroup = /** @class */ (function () {
     };
     /**
      * @param {?} model
+     * @param {?=} propagateChanges
      * @return {?}
      */
     AccessableFormGroup.prototype.reset = /**
      * @param {?} model
+     * @param {?=} propagateChanges
      * @return {?}
      */
-    function (model) {
+    function (model, propagateChanges) {
+        if (propagateChanges === void 0) { propagateChanges = true; }
         if (!Util.isDefined(model)) {
             model = (/** @type {?} */ ({}));
         }
@@ -1459,6 +1527,9 @@ AccessableFormGroup = /** @class */ (function () {
          * @return {?}
          */
         function (field, key) { return field.reset(model[key]); }));
+        if (propagateChanges) {
+            this.changed$.next();
+        }
         return this;
     };
     Object.defineProperty(AccessableFormGroup.prototype, "fields", {
@@ -1559,6 +1630,16 @@ AccessableFormGroup = /** @class */ (function () {
         enumerable: true,
         configurable: true
     });
+    Object.defineProperty(AccessableFormGroup.prototype, "changed", {
+        get: /**
+         * @return {?}
+         */
+        function () {
+            return this.changed$.asObservable();
+        },
+        enumerable: true,
+        configurable: true
+    });
     return AccessableFormGroup;
 }());
 if (false) {
@@ -1569,6 +1650,11 @@ if (false) {
      * @private
      */
     AccessableFormGroup.prototype.fields$;
+    /**
+     * @type {?}
+     * @private
+     */
+    AccessableFormGroup.prototype.changed$;
 }
 
 /**
