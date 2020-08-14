@@ -2256,7 +2256,7 @@
         function (models) {
             var e_8, _a;
             this.entries$ = [];
-            this.control.reset([]);
+            this.control.clear();
             if (Util.isDefined(models) && underscore.isArray(models)) {
                 try {
                     for (var models_1 = __values(models), models_1_1 = models_1.next(); !models_1_1.done; models_1_1 = models_1.next()) {

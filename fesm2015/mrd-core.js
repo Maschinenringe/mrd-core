@@ -1503,7 +1503,7 @@ class AccessableFormArray {
      */
     reset(models) {
         this.entries$ = [];
-        this.control.reset([]);
+        this.control.clear();
         if (Util.isDefined(models) && isArray(models)) {
             for (const model of models) {
                 this.push(model);
