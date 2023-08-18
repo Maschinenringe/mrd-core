@@ -3,8 +3,8 @@ export declare abstract class AbstractRouteConfiguration<TParams> {
     protected paramNames?: TParams;
     protected parent?: AbstractRouteConfiguration<any>;
     protected constructor(pathSegments: string[], paramNames?: TParams, parent?: AbstractRouteConfiguration<any>);
-    readonly path: string;
-    readonly paramDefinition: TParams;
+    get path(): string;
+    get paramDefinition(): TParams;
     buildNavigation(params?: TParams): any[];
     validate(): boolean;
 }

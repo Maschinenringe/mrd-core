@@ -6,6 +6,8 @@ export declare class ReadonlyRestServiceObserver<T> {
     private isFetchingItems$;
     constructor();
     isActivate(): boolean;
-    isFetchingItems: boolean;
-    isFetchingItem: boolean;
+    set isFetchingItems(fetching: boolean);
+    get isFetchingItems(): boolean;
+    set isFetchingItem(fetching: boolean);
+    get isFetchingItem(): boolean;
 }

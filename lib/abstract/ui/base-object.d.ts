@@ -1,7 +1,7 @@
 import { OnDestroy } from '@angular/core';
 import { Observable, Subject, Subscription } from "rxjs";
 import { ISubscriptionHandler } from "../../interface/util/i-subscription-handler";
-/** Abstracte Klasse von der alle Komponenten und Services erben. Sie stellt eine Speicherverwaltung für Observables bereit. */
+import * as i0 from "@angular/core";
 export declare abstract class BaseObject implements OnDestroy {
     /** Wird benutzt um Observables bei der Zerstörung einer Komponente auszulösen.
      * Wird im ngOnDestroy ausgelöst.
@@ -18,4 +18,6 @@ export declare abstract class BaseObject implements OnDestroy {
      *  wird nicht freigegeben.
      */
     ngOnDestroy(): void;
+    static ɵfac: i0.ɵɵFactoryDeclaration<BaseObject, never>;
+    static ɵcmp: i0.ɵɵComponentDeclaration<BaseObject, "ng-component", never, {}, {}, never, never, false, never>;
 }

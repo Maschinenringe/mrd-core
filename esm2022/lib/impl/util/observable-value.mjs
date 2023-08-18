@@ -1,0 +1,29 @@
+import { Subject } from 'rxjs';
+import { Util } from "./util";
+/**
+ * Diese Klasse kann verwendet werden um Werte zu speichern und die automatisch
+ * überwachbar zu machen. Dadurch können UI Push Strategien leichter implementiert werden.
+ */
+export class ObservableValue {
+    equals;
+    value$;
+    changed = new Subject();
+    constructor(initialValue, equals) {
+        this.equals = equals;
+        this.value$ = initialValue;
+        this.equals = Util.isDefined(this.equals) ? this.equals : this.defaultComparator;
+    }
+    set value(value) {
+        if (!this.equals(this.value$, value)) {
+            this.value$ = value;
+            this.changed.next(value);
+        }
+    }
+    get value() {
+        return this.value$;
+    }
+    defaultComparator(current, next) {
+        return current === next;
+    }
+}
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoib2JzZXJ2YWJsZS12YWx1ZS5qcyIsInNvdXJjZVJvb3QiOiIiLCJzb3VyY2VzIjpbIi4uLy4uLy4uLy4uLy4uLy4uL3Byb2plY3RzL21yZC1jb3JlL3NyYy9saWIvaW1wbC91dGlsL29ic2VydmFibGUtdmFsdWUudHMiXSwibmFtZXMiOltdLCJtYXBwaW5ncyI6IkFBQUEsT0FBTyxFQUFFLE9BQU8sRUFBRSxNQUFNLE1BQU0sQ0FBQztBQUMvQixPQUFPLEVBQUMsSUFBSSxFQUFDLE1BQU0sUUFBUSxDQUFDO0FBRTVCOzs7R0FHRztBQUNILE1BQU0sT0FBTyxlQUFlO0lBT1A7SUFMWCxNQUFNLENBQWE7SUFDWCxPQUFPLEdBQXdCLElBQUksT0FBTyxFQUFjLENBQUM7SUFFekUsWUFDRSxZQUF5QixFQUNSLE1BQTJEO1FBQTNELFdBQU0sR0FBTixNQUFNLENBQXFEO1FBRTVFLElBQUksQ0FBQyxNQUFNLEdBQUcsWUFBWSxDQUFDO1FBQzNCLElBQUksQ0FBQyxNQUFNLEdBQUcsSUFBSSxDQUFDLFNBQVMsQ0FBQyxJQUFJLENBQUMsTUFBTSxDQUFDLENBQUMsQ0FBQyxDQUFDLElBQUksQ0FBQyxNQUFNLENBQUMsQ0FBQyxDQUFDLElBQUksQ0FBQyxpQkFBaUIsQ0FBQztJQUNuRixDQUFDO0lBR0QsSUFBVyxLQUFLLENBQUMsS0FBaUI7UUFDaEMsSUFBSSxDQUFDLElBQUksQ0FBQyxNQUFNLENBQUMsSUFBSSxDQUFDLE1BQU0sRUFBRSxLQUFLLENBQUMsRUFBRTtZQUNwQyxJQUFJLENBQUMsTUFBTSxHQUFHLEtBQUssQ0FBQztZQUNwQixJQUFJLENBQUMsT0FBTyxDQUFDLElBQUksQ0FBQyxLQUFLLENBQUMsQ0FBQztTQUMxQjtJQUNILENBQUM7SUFFRCxJQUFXLEtBQUs7UUFDZCxPQUFPLElBQUksQ0FBQyxNQUFNLENBQUM7SUFDckIsQ0FBQztJQUdPLGlCQUFpQixDQUFDLE9BQW1CLEVBQUUsSUFBZ0I7UUFDN0QsT0FBTyxPQUFPLEtBQUssSUFBSSxDQUFDO0lBQzFCLENBQUM7Q0FFRiIsInNvdXJjZXNDb250ZW50IjpbImltcG9ydCB7IFN1YmplY3QgfSBmcm9tICdyeGpzJztcclxuaW1wb3J0IHtVdGlsfSBmcm9tIFwiLi91dGlsXCI7XHJcblxyXG4vKipcclxuICogRGllc2UgS2xhc3NlIGthbm4gdmVyd2VuZGV0IHdlcmRlbiB1bSBXZXJ0ZSB6dSBzcGVpY2hlcm4gdW5kIGRpZSBhdXRvbWF0aXNjaFxyXG4gKiDDvGJlcndhY2hiYXIgenUgbWFjaGVuLiBEYWR1cmNoIGvDtm5uZW4gVUkgUHVzaCBTdHJhdGVnaWVuIGxlaWNodGVyIGltcGxlbWVudGllcnQgd2VyZGVuLlxyXG4gKi9cclxuZXhwb3J0IGNsYXNzIE9ic2VydmFibGVWYWx1ZTxUVmFsdWVUeXBlPiB7XHJcblxyXG4gIHByaXZhdGUgdmFsdWUkOiBUVmFsdWVUeXBlO1xyXG4gIHB1YmxpYyByZWFkb25seSBjaGFuZ2VkOiBTdWJqZWN0PFRWYWx1ZVR5cGU+ID0gbmV3IFN1YmplY3Q8VFZhbHVlVHlwZT4oKTtcclxuXHJcbiAgcHVibGljIGNvbnN0cnVjdG9yKFxyXG4gICAgaW5pdGlhbFZhbHVlPzogVFZhbHVlVHlwZSxcclxuICAgIHByaXZhdGUgcmVhZG9ubHkgZXF1YWxzPzogKGN1cnJlbnQ6IFRWYWx1ZVR5cGUsIG5leHQ6IFRWYWx1ZVR5cGUpID0+IGJvb2xlYW5cclxuICApIHtcclxuICAgIHRoaXMudmFsdWUkID0gaW5pdGlhbFZhbHVlO1xyXG4gICAgdGhpcy5lcXVhbHMgPSBVdGlsLmlzRGVmaW5lZCh0aGlzLmVxdWFscykgPyB0aGlzLmVxdWFscyA6IHRoaXMuZGVmYXVsdENvbXBhcmF0b3I7XHJcbiAgfVxyXG5cclxuXHJcbiAgcHVibGljIHNldCB2YWx1ZSh2YWx1ZTogVFZhbHVlVHlwZSkge1xyXG4gICAgaWYgKCF0aGlzLmVxdWFscyh0aGlzLnZhbHVlJCwgdmFsdWUpKSB7XHJcbiAgICAgIHRoaXMudmFsdWUkID0gdmFsdWU7XHJcbiAgICAgIHRoaXMuY2hhbmdlZC5uZXh0KHZhbHVlKTtcclxuICAgIH1cclxuICB9XHJcblxyXG4gIHB1YmxpYyBnZXQgdmFsdWUoKTogVFZhbHVlVHlwZSB7XHJcbiAgICByZXR1cm4gdGhpcy52YWx1ZSQ7XHJcbiAgfVxyXG5cclxuXHJcbiAgcHJpdmF0ZSBkZWZhdWx0Q29tcGFyYXRvcihjdXJyZW50OiBUVmFsdWVUeXBlLCBuZXh0OiBUVmFsdWVUeXBlKTogYm9vbGVhbiB7XHJcbiAgICByZXR1cm4gY3VycmVudCA9PT0gbmV4dDtcclxuICB9XHJcblxyXG59XHJcbiJdfQ==

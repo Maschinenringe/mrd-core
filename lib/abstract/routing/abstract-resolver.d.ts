@@ -6,5 +6,5 @@ export declare abstract class AbstractResolver<TData, TRouteParams> implements R
     protected state: RouterStateSnapshot;
     protected abstract onResolve(): Observable<TData>;
     resolve(route: ActivatedRouteSnapshot, state: RouterStateSnapshot): Observable<TData> | Promise<TData> | TData;
-    protected readonly routeConfiguration: AbstractRouteConfiguration<TRouteParams>;
+    protected get routeConfiguration(): AbstractRouteConfiguration<TRouteParams>;
 }

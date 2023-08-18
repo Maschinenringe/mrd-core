@@ -8,5 +8,5 @@ export declare abstract class AbstractActivationGuard<TSuccessType, TRouteParams
     protected route: ActivatedRouteSnapshot;
     protected state: RouterStateSnapshot;
     canActivate(route: ActivatedRouteSnapshot, state: RouterStateSnapshot): Observable<boolean | UrlTree> | Promise<boolean | UrlTree> | boolean | UrlTree;
-    protected readonly routeConfiguration: AbstractRouteConfiguration<TRouteParams>;
+    protected get routeConfiguration(): AbstractRouteConfiguration<TRouteParams>;
 }

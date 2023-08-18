@@ -13,9 +13,14 @@ export declare class RestServiceObserver<T> extends ReadonlyRestServiceObserver<
     private isSavingItem$;
     constructor();
     isActivate(): boolean;
-    isCreatingItem: boolean;
-    isUpdatingItem: boolean;
-    isDestoyingItem: boolean;
-    isPartiallyUpdatingItem: boolean;
-    isSavingItem: boolean;
+    set isCreatingItem(isCreating: boolean);
+    get isCreatingItem(): boolean;
+    set isUpdatingItem(isUpdating: boolean);
+    get isUpdatingItem(): boolean;
+    set isDestoyingItem(isDestroying: boolean);
+    get isDestoyingItem(): boolean;
+    set isPartiallyUpdatingItem(isUpdating: boolean);
+    get isPartiallyUpdatingItem(): boolean;
+    set isSavingItem(isSaving: boolean);
+    get isSavingItem(): boolean;
 }

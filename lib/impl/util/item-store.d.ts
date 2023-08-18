@@ -13,5 +13,5 @@ export declare class ItemStore<T> {
     update(item: T): void;
     push(item: T): void;
     protected internalTransform$(): void;
-    readonly items: T[];
+    get items(): T[];
 }
