@@ -19,5 +19,5 @@ export declare abstract class BaseObject implements OnDestroy {
      */
     ngOnDestroy(): void;
     static ɵfac: i0.ɵɵFactoryDeclaration<BaseObject, never>;
-    static ɵcmp: i0.ɵɵComponentDeclaration<BaseObject, "ng-component", never, {}, {}, never, never, false, never>;
+    static ɵdir: i0.ɵɵDirectiveDeclaration<BaseObject, never, never, {}, {}, never, never, false, never>;
 }

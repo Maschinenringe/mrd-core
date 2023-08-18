@@ -14,5 +14,5 @@ export declare abstract class BaseRootComponent extends BasePushStrategyObject i
     ngOnDestroy(): void;
     protected onNextRequested(observable: IEntitySelector<any>, dataSet: any, resolver: AbstractEntityResolver<any, any>): void;
     static ɵfac: i0.ɵɵFactoryDeclaration<BaseRootComponent, never>;
-    static ɵcmp: i0.ɵɵComponentDeclaration<BaseRootComponent, "ng-component", never, {}, {}, never, never, false, never>;
+    static ɵdir: i0.ɵɵDirectiveDeclaration<BaseRootComponent, never, never, {}, {}, never, never, false, never>;
 }

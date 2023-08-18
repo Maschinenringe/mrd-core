@@ -6,5 +6,5 @@ export declare abstract class BasePushStrategyObject extends BaseObject {
     protected abstract cdr: ChangeDetectorRef;
     protected markForCheckIf(subject: Observable<any>): Subscription;
     static ɵfac: i0.ɵɵFactoryDeclaration<BasePushStrategyObject, never>;
-    static ɵcmp: i0.ɵɵComponentDeclaration<BasePushStrategyObject, "ng-component", never, {}, {}, never, never, false, never>;
+    static ɵdir: i0.ɵɵDirectiveDeclaration<BasePushStrategyObject, never, never, {}, {}, never, never, false, never>;
 }

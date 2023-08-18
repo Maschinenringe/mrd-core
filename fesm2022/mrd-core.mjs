@@ -2,7 +2,7 @@ import { take, finalize, tap, takeUntil, switchMap, catchError } from 'rxjs/oper
 import * as _ from 'underscore';
 import { Subject, Observable, forkJoin, of } from 'rxjs';
 import * as i0 from '@angular/core';
-import { Component } from '@angular/core';
+import { Directive } from '@angular/core';
 import { FormControl, FormGroup, FormArray } from '@angular/forms';
 import * as moment from 'moment';
 
@@ -323,13 +323,10 @@ class BaseObject {
         this.$unsubscribe.complete();
     }
     /** @nocollapse */ static ɵfac = function BaseObject_Factory(t) { return new (t || BaseObject)(); };
-    /** @nocollapse */ static ɵcmp = /** @pureOrBreakMyCode */ i0.ɵɵdefineComponent({ type: BaseObject, selectors: [["ng-component"]], decls: 0, vars: 0, template: function BaseObject_Template(rf, ctx) { }, encapsulation: 2 });
+    /** @nocollapse */ static ɵdir = /** @pureOrBreakMyCode */ i0.ɵɵdefineDirective({ type: BaseObject });
 }
 (function () { (typeof ngDevMode === "undefined" || ngDevMode) && i0.ɵsetClassMetadata(BaseObject, [{
-        type: Component,
-        args: [{
-                template: ''
-            }]
+        type: Directive
     }], null, null); })();
 
 class ValidatorRequired {
@@ -1262,13 +1259,10 @@ class BasePushStrategyObject extends BaseObject {
         return this.watch(subject, new SubscriptionHandler(this.cdr.markForCheck.bind(this.cdr)));
     }
     /** @nocollapse */ static ɵfac = /** @pureOrBreakMyCode */ function () { let ɵBasePushStrategyObject_BaseFactory; return function BasePushStrategyObject_Factory(t) { return (ɵBasePushStrategyObject_BaseFactory || (ɵBasePushStrategyObject_BaseFactory = i0.ɵɵgetInheritedFactory(BasePushStrategyObject)))(t || BasePushStrategyObject); }; }();
-    /** @nocollapse */ static ɵcmp = /** @pureOrBreakMyCode */ i0.ɵɵdefineComponent({ type: BasePushStrategyObject, selectors: [["ng-component"]], features: [i0.ɵɵInheritDefinitionFeature], decls: 0, vars: 0, template: function BasePushStrategyObject_Template(rf, ctx) { }, encapsulation: 2 });
+    /** @nocollapse */ static ɵdir = /** @pureOrBreakMyCode */ i0.ɵɵdefineDirective({ type: BasePushStrategyObject, features: [i0.ɵɵInheritDefinitionFeature] });
 }
 (function () { (typeof ngDevMode === "undefined" || ngDevMode) && i0.ɵsetClassMetadata(BasePushStrategyObject, [{
-        type: Component,
-        args: [{
-                template: ''
-            }]
+        type: Directive
     }], null, null); })();
 
 /**
@@ -1567,13 +1561,10 @@ class BaseRootComponent extends BasePushStrategyObject {
         }));
     }
     /** @nocollapse */ static ɵfac = /** @pureOrBreakMyCode */ function () { let ɵBaseRootComponent_BaseFactory; return function BaseRootComponent_Factory(t) { return (ɵBaseRootComponent_BaseFactory || (ɵBaseRootComponent_BaseFactory = i0.ɵɵgetInheritedFactory(BaseRootComponent)))(t || BaseRootComponent); }; }();
-    /** @nocollapse */ static ɵcmp = /** @pureOrBreakMyCode */ i0.ɵɵdefineComponent({ type: BaseRootComponent, selectors: [["ng-component"]], features: [i0.ɵɵInheritDefinitionFeature], decls: 0, vars: 0, template: function BaseRootComponent_Template(rf, ctx) { }, encapsulation: 2 });
+    /** @nocollapse */ static ɵdir = /** @pureOrBreakMyCode */ i0.ɵɵdefineDirective({ type: BaseRootComponent, features: [i0.ɵɵInheritDefinitionFeature] });
 }
 (function () { (typeof ngDevMode === "undefined" || ngDevMode) && i0.ɵsetClassMetadata(BaseRootComponent, [{
-        type: Component,
-        args: [{
-                template: ''
-            }]
+        type: Directive
     }], null, null); })();
 
 class AbstractReadonlyCachedRestservice extends AbstractStoredReadonlyRestservice {
