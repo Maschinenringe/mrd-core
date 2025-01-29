@@ -22,5 +22,9 @@ export declare abstract class AccessableFormGroup<TFields, TModel extends object
     get disabled(): boolean;
     get enabled(): boolean;
     get valueChanges(): Observable<void>;
-    get fieldChanges(): Observable<IAccessableFormControl<any, any>>;
+    get fieldChanges(): Observable<IAccessableFieldChange>;
+}
+export interface IAccessableFieldChange {
+    name: string;
+    control: IAccessableFormControl<any, any>;
 }

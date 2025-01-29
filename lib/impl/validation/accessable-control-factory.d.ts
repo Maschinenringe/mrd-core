@@ -4,6 +4,7 @@ export declare abstract class AccessableControlFactory {
     static simpleControl(formState: any, validators: IValidator[]): AccessableFormControl;
     static numberControl(formState: any, validators: IValidator[]): AccessableFormControl;
     static numberBooleanControl(formState: any, validators: IValidator[]): AccessableFormControl;
+    static numberDigitsControl(formState: any, validators: IValidator[], digits?: number): AccessableFormControl;
     static dateControl(formState: any, validators: IValidator[]): AccessableFormControl;
     /** Schneides alle Whitespaces am Ende und Anfang weg */
     static trimControl(formState: any, validators: IValidator[]): AccessableFormControl;

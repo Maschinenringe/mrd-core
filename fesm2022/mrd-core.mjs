@@ -568,9 +568,9 @@ class AccessableFormGroup {
             return field.control;
         }));
         this.fields$ = fields;
-        _.each(this.fields$, (field) => {
+        _.each(this.fields$, (field, key) => {
             field.valueChanges.subscribe(() => {
-                this.fieldChanged$.next(field);
+                this.fieldChanged$.next({ name: key, control: field });
             });
         });
     }
@@ -1287,6 +1287,15 @@ class AccessableControlFactory {
         const control = AccessableControlFactory.simpleControl(formState, validators);
         control.showAs = TypeConverter.numberToBoolean;
         control.convertTo = TypeConverter.booleanToNumber;
+        control.setValue(formState);
+        return control;
+    }
+    static numberDigitsControl(formState = null, validators, digits = 3) {
+        const control = AccessableControlFactory.simpleControl(null, validators);
+        control.showAs = (n) => {
+            return TypeConverter.asGermanFloat(n, digits);
+        };
+        control.convertTo = TypeConverter.toNumber;
         control.setValue(formState);
         return control;
     }
