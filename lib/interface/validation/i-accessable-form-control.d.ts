@@ -1,4 +1,5 @@
 import { FormArray, FormControl, FormGroup } from '@angular/forms';
+import { Observable } from 'rxjs';
 export interface IAccessableFormControl<TControlType, TType> {
     value: TType;
     dirty: boolean;
@@ -12,4 +13,5 @@ export interface IAccessableFormControl<TControlType, TType> {
     reset(model: TType): TControlType;
     disable(): TControlType;
     enable(): TControlType;
+    valueChanges: Observable<any>;
 }

@@ -75,6 +75,38 @@ class Util {
     static isDefined(obj) {
         return obj !== null && obj !== undefined;
     }
+    /**
+     * Prüft, ob ein Objekt definiert ist und nicht leer oder 0 ist.
+     * Als nicht definiert gelten: null, undefined
+     * Objekte, die als leer gelten, sind: {}
+     * Strings, die als leer gelten, sind: ''
+     * Arrays, die als leer gelten, sind: []
+     * Zahlen, die als Zero gelten, sind: 0
+     *
+     * @param obj Das zu prüfende Objekt
+     * @param returnTheValueIfDefined Gibt an, ob der Wert zurückgegeben werden soll, wenn das Objekt definiert ist
+     * @param undefinedReturnValue Der Wert, der zurückgegeben wird, wenn das Objekt nicht definiert ist und returnTheValueIfDefined auf true gesetzt ist
+     * @returns Wenn returnTheValueIfDefined auf true gesetzt ist, wird der Wert des Objekts zurückgegeben, wenn es definiert ist oder undefinedRetrunValue (default: false).
+     * Ansonsten wird true zurückgegeben, wenn das Objekt definiert ist, ansonsten false.
+     */
+    static isDefinedNotEmptyOrZero(obj, returnTheValueIfDefined = false, undefinedReturnValue = false) {
+        if (obj === null || obj === undefined) {
+            return returnTheValueIfDefined ? undefinedReturnValue : false;
+        }
+        if (_.isString(obj) && obj === '') {
+            return returnTheValueIfDefined ? undefinedReturnValue : false;
+        }
+        if (_.isArray(obj) && obj.length === 0) {
+            return returnTheValueIfDefined ? undefinedReturnValue : false;
+        }
+        if (_.isNumber(obj) && !_.isNaN(obj) && obj === 0) {
+            return returnTheValueIfDefined ? undefinedReturnValue : false;
+        }
+        if (_.isObject(obj) && _.isEmpty(obj)) {
+            return returnTheValueIfDefined ? undefinedReturnValue : false;
+        }
+        return returnTheValueIfDefined ? obj : true;
+    }
     static armUrlWithSearchParams(url, queryParams) {
         if (!queryParams || _.isEmpty(queryParams)) {
             return url;
@@ -389,10 +421,11 @@ class AccessableFormControl {
     required$;
     validators$;
     blocked$;
+    previousValue$ = null;
     initialize(formState, validators) {
-        this.control = new FormControl(formState, null, null);
+        this.control = new FormControl(formState, null);
         this.validateWith(validators);
-        this.setValue(formState);
+        this.setValue(formState, true);
     }
     validateWith(validators = []) {
         this.validators$ = validators;
@@ -408,7 +441,10 @@ class AccessableFormControl {
         this.control.updateValueAndValidity();
         return this;
     }
-    setValue(value) {
+    setValue(value, skipSetPreviousValue = false) {
+        if (!skipSetPreviousValue) {
+            this.previousValue = this.value;
+        }
         if (this.showAs) {
             this.control.setValue(this.showAs(value));
         }
@@ -417,7 +453,10 @@ class AccessableFormControl {
         }
         return this;
     }
-    reset(value) {
+    reset(value, skipSetPreviousValue = false) {
+        if (!skipSetPreviousValue) {
+            this.previousValue = this.value;
+        }
         if (this.showAs) {
             this.control.reset(this.showAs(value));
         }
@@ -499,6 +538,12 @@ class AccessableFormControl {
             });
         });
     }
+    get previousValue() {
+        return this.previousValue$;
+    }
+    set previousValue(value) {
+        this.previousValue$ = value;
+    }
     get required() {
         return this.required$;
     }
@@ -517,11 +562,17 @@ class AccessableFormGroup {
     control;
     fields$;
     changed$ = new Subject();
+    fieldChanged$ = new Subject();
     initialize(fields) {
         this.control = new FormGroup(_.mapObject(fields, (field) => {
             return field.control;
         }));
         this.fields$ = fields;
+        _.each(this.fields$, (field) => {
+            field.valueChanges.subscribe(() => {
+                this.fieldChanged$.next(field);
+            });
+        });
     }
     markAsUsed() {
         _.each(this.fields$, (field) => field.markAsUsed());
@@ -545,7 +596,7 @@ class AccessableFormGroup {
         }
         _.each(this.fields$, (field, key) => field.reset(model[key]));
         if (propagateChanges) {
-            this.changed$.next();
+            this.changed$.next(this.value);
         }
         return this;
     }
@@ -580,8 +631,11 @@ class AccessableFormGroup {
     get enabled() {
         return this.control.enabled;
     }
-    get changed() {
+    get valueChanges() {
         return this.changed$.asObservable();
+    }
+    get fieldChanges() {
+        return this.fieldChanged$.asObservable();
     }
 }
 
@@ -592,18 +646,26 @@ class AccessableFormArray {
     type;
     required$ = false;
     entries$;
+    previousEntries$;
     initialize(type) {
         this.control = new FormArray([]);
         this.type = type;
         this.entries$ = [];
+        this.previousEntries$ = [];
     }
-    push(entry) {
+    push(entry, skipSetPreviousEntries = false) {
+        if (!skipSetPreviousEntries) {
+            this.previousEntries$ = this.entries$.slice();
+        }
         const item = this.generateFormEntry(entry);
-        this.control.push(item.control);
         this.entries$.push(item);
+        this.control.push(item.control);
         return item;
     }
-    removeAt(index) {
+    removeAt(index, skipSetPreviousEntries = false) {
+        if (!skipSetPreviousEntries) {
+            this.previousEntries$ = this.entries$.slice();
+        }
         this.control.removeAt(index);
         this.entries$ = _.reject(this.entries$, (e, round) => {
             return round === index;
@@ -677,6 +739,12 @@ class AccessableFormArray {
     get entries() {
         return this.entries$;
     }
+    get previousEntries() {
+        return this.previousEntries$;
+    }
+    get valueChanges() {
+        return this.control.valueChanges;
+    }
     disable() {
         this.control.disable();
         return this;
@@ -718,7 +786,10 @@ class AccessableFormArray {
         }
         return this;
     }
-    reset(models) {
+    reset(models, skipSetPreviousEntries = false) {
+        if (!skipSetPreviousEntries) {
+            this.previousEntries$ = this.entries$.slice();
+        }
         this.entries$ = [];
         this.control.clear();
         if (Util.isDefined(models) && _.isArray(models)) {

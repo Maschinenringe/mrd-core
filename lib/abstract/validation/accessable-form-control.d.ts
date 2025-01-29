@@ -9,10 +9,11 @@ export declare class AccessableFormControl<TType = any> implements IAccessableFo
     private required$;
     private validators$;
     private blocked$;
+    private previousValue$;
     initialize(formState?: any, validators?: IValidator[]): void;
     validateWith(validators?: IValidator[]): AccessableFormControl;
-    setValue(value: any): AccessableFormControl;
-    reset(value: TType): AccessableFormControl;
+    setValue(value: any, skipSetPreviousValue?: boolean): AccessableFormControl;
+    reset(value: TType, skipSetPreviousValue?: boolean): AccessableFormControl;
     markAsUsed(): AccessableFormControl;
     markAsUnused(): AccessableFormControl;
     markAsDirty(): AccessableFormControl;
@@ -28,6 +29,8 @@ export declare class AccessableFormControl<TType = any> implements IAccessableFo
     get value(): any;
     set value(value: any);
     get valueChanges(): Observable<any>;
+    get previousValue(): any;
+    set previousValue(value: any);
     get required(): boolean;
     get touched(): boolean;
     get dirty(): boolean;

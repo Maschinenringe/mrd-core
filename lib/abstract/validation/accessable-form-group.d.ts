@@ -5,6 +5,7 @@ export declare abstract class AccessableFormGroup<TFields, TModel extends object
     control: FormGroup;
     private fields$;
     private changed$;
+    private fieldChanged$;
     initialize(fields: TFields): void;
     markAsUsed(): AccessableFormGroup<TFields, TModel>;
     markAsUnused(): AccessableFormGroup<TFields, TModel>;
@@ -20,5 +21,6 @@ export declare abstract class AccessableFormGroup<TFields, TModel extends object
     enable(): AccessableFormGroup<TFields, TModel>;
     get disabled(): boolean;
     get enabled(): boolean;
-    get changed(): Observable<void>;
+    get valueChanges(): Observable<void>;
+    get fieldChanges(): Observable<IAccessableFormControl<any, any>>;
 }
