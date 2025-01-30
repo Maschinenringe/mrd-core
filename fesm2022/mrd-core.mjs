@@ -666,10 +666,10 @@ class AccessableFormArray {
         if (!skipSetPreviousEntries) {
             this.previousEntries$ = this.entries$.slice();
         }
-        this.control.removeAt(index);
         this.entries$ = _.reject(this.entries$, (e, round) => {
             return round === index;
         });
+        this.control.removeAt(index);
         let markAsUsed = false;
         for (const entry of this.entries$) {
             markAsUsed = markAsUsed || entry.dirty;
