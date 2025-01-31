@@ -427,7 +427,7 @@ class AccessableFormControl {
         this.validateWith(validators);
         this.setValue(formState, true);
     }
-    validateWith(validators = []) {
+    validateWith(validators = [], opts) {
         this.validators$ = validators;
         this.control.setValidators(_.map(validators, (v) => {
             return v.validator();
@@ -438,60 +438,60 @@ class AccessableFormControl {
                 this.required$ = true;
             }
         });
-        this.control.updateValueAndValidity();
+        this.control.updateValueAndValidity(opts);
         return this;
     }
-    setValue(value, skipSetPreviousValue = false) {
+    setValue(value, skipSetPreviousValue = false, opts) {
         if (!skipSetPreviousValue) {
             this.previousValue = this.value;
         }
         if (this.showAs) {
-            this.control.setValue(this.showAs(value));
+            this.control.setValue(this.showAs(value), opts);
         }
         else {
-            this.control.setValue(value);
+            this.control.setValue(value, opts);
         }
         return this;
     }
-    reset(value, skipSetPreviousValue = false) {
+    reset(value, skipSetPreviousValue = false, opts) {
         if (!skipSetPreviousValue) {
             this.previousValue = this.value;
         }
         if (this.showAs) {
-            this.control.reset(this.showAs(value));
+            this.control.reset(this.showAs(value), opts);
         }
         else {
-            this.control.reset(value);
+            this.control.reset(value, opts);
         }
         return this;
     }
-    markAsUsed() {
-        this.control.markAsDirty();
-        this.control.markAsTouched();
-        this.control.updateValueAndValidity();
+    markAsUsed(opts) {
+        this.control.markAsDirty(opts);
+        this.control.markAsTouched(opts);
+        this.control.updateValueAndValidity(opts);
         return this;
     }
-    markAsUnused() {
+    markAsUnused(opts) {
         _.each(this.validators$, (validator) => validator.hasError = false);
-        this.control.updateValueAndValidity();
-        this.control.markAsPristine();
-        this.control.markAsUntouched();
+        this.control.updateValueAndValidity(opts);
+        this.control.markAsPristine(opts);
+        this.control.markAsUntouched(opts);
         return this;
     }
-    markAsDirty() {
-        this.control.markAsDirty();
+    markAsDirty(opts) {
+        this.control.markAsDirty(opts);
         return this;
     }
-    markAsTouched() {
-        this.control.markAsTouched();
+    markAsTouched(opts) {
+        this.control.markAsTouched(opts);
         return this;
     }
-    disable() {
-        this.control.disable();
+    disable(opts) {
+        this.control.disable(opts);
         return this;
     }
-    enable() {
-        this.control.enable();
+    enable(opts) {
+        this.control.enable(opts);
         return this;
     }
     blockControls() {
@@ -653,30 +653,30 @@ class AccessableFormArray {
         this.entries$ = [];
         this.previousEntries$ = [];
     }
-    push(entry, skipSetPreviousEntries = false) {
+    push(entry, skipSetPreviousEntries = false, opts) {
         if (!skipSetPreviousEntries) {
             this.previousEntries$ = this.entries$.slice();
         }
         const item = this.generateFormEntry(entry);
         this.entries$.push(item);
-        this.control.push(item.control);
+        this.control.push(item.control, opts);
         return item;
     }
-    removeAt(index, skipSetPreviousEntries = false) {
+    removeAt(index, skipSetPreviousEntries = false, opts) {
         if (!skipSetPreviousEntries) {
             this.previousEntries$ = this.entries$.slice();
         }
         this.entries$ = _.reject(this.entries$, (e, round) => {
             return round === index;
         });
-        this.control.removeAt(index);
+        this.control.removeAt(index, opts);
         let markAsUsed = false;
         for (const entry of this.entries$) {
             markAsUsed = markAsUsed || entry.dirty;
         }
-        markAsUsed ? this.markAsUsed() : this.markAsUnused();
+        markAsUsed ? this.markAsUsed(opts) : this.markAsUnused(opts);
     }
-    validateWith(validators) {
+    validateWith(validators, opts) {
         if (!Util.isDefined(validators)) {
             validators = [];
         }
@@ -690,7 +690,7 @@ class AccessableFormArray {
                 this.required$ = true;
             }
         });
-        this.control.updateValueAndValidity();
+        this.control.updateValueAndValidity(opts);
         return this;
     }
     clearValidators() {
@@ -745,44 +745,54 @@ class AccessableFormArray {
     get valueChanges() {
         return this.control.valueChanges;
     }
-    disable() {
-        this.control.disable();
+    disable(opts) {
+        this.control.disable(opts);
         return this;
     }
-    enable() {
-        this.control.enable();
-        for (const entry of this.entries$) {
-            entry.enable();
+    enable(opts) {
+        this.control.enable(opts);
+        if (opts?.onlySelf !== true) {
+            for (const entry of this.entries$) {
+                entry.enable();
+            }
         }
         return this;
     }
-    markAsDirty() {
-        this.control.markAsDirty();
-        for (const entry of this.entries$) {
-            entry.markAsDirty();
+    markAsDirty(opts) {
+        this.control.markAsDirty(opts);
+        if (opts?.onlySelf !== true) {
+            for (const entry of this.entries$) {
+                entry.markAsDirty();
+            }
         }
         return this;
     }
-    markAsTouched() {
-        this.control.markAsTouched();
-        for (const entry of this.entries$) {
-            entry.markAsTouched();
+    markAsTouched(opts) {
+        this.control.markAsTouched(opts);
+        if (opts?.onlySelf !== true) {
+            for (const entry of this.entries$) {
+                entry.markAsTouched();
+            }
         }
         return this;
     }
-    markAsUnused() {
-        this.control.markAsUntouched();
-        this.control.markAsPristine();
-        for (const entry of this.entries$) {
-            entry.markAsUnused();
+    markAsUnused(opts) {
+        this.control.markAsUntouched(opts);
+        this.control.markAsPristine(opts);
+        if (opts?.onlySelf !== true) {
+            for (const entry of this.entries$) {
+                entry.markAsUnused();
+            }
         }
         return this;
     }
-    markAsUsed() {
-        this.control.markAsTouched();
-        this.control.markAsDirty();
-        for (const entry of this.entries$) {
-            entry.markAsUsed();
+    markAsUsed(opts) {
+        this.control.markAsTouched(opts);
+        this.control.markAsDirty(opts);
+        if (opts?.onlySelf !== true) {
+            for (const entry of this.entries$) {
+                entry.markAsUsed();
+            }
         }
         return this;
     }

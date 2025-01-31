@@ -6,12 +6,16 @@ export interface IAccessableFormControl<TControlType, TType> {
     touched: boolean;
     valid: boolean;
     control: FormGroup | FormControl | FormArray;
-    markAsUsed(): TControlType;
-    markAsUnused(): TControlType;
-    markAsDirty(): TControlType;
-    markAsTouched(): TControlType;
+    markAsUsed(opts?: IAccessableFormOptions): TControlType;
+    markAsUnused(opts?: IAccessableFormOptions): TControlType;
+    markAsDirty(opts?: IAccessableFormOptions): TControlType;
+    markAsTouched(opts?: IAccessableFormOptions): TControlType;
     reset(model: TType): TControlType;
-    disable(): TControlType;
-    enable(): TControlType;
+    disable(opts?: IAccessableFormOptions): TControlType;
+    enable(opts?: IAccessableFormOptions): TControlType;
     valueChanges: Observable<any>;
+}
+export interface IAccessableFormOptions {
+    emitEvent?: boolean;
+    onlySelf?: boolean;
 }

@@ -1,6 +1,6 @@
 import { IValidator } from '../../interface/validation/i-validator';
 import { FormControl } from '@angular/forms';
-import { IAccessableFormControl } from '../../interface/validation/i-accessable-form-control';
+import { IAccessableFormControl, IAccessableFormOptions } from '../../interface/validation/i-accessable-form-control';
 import { Observable } from 'rxjs';
 export declare class AccessableFormControl<TType = any> implements IAccessableFormControl<AccessableFormControl<TType>, TType> {
     control: FormControl;
@@ -11,15 +11,15 @@ export declare class AccessableFormControl<TType = any> implements IAccessableFo
     private blocked$;
     private previousValue$;
     initialize(formState?: any, validators?: IValidator[]): void;
-    validateWith(validators?: IValidator[]): AccessableFormControl;
-    setValue(value: any, skipSetPreviousValue?: boolean): AccessableFormControl;
-    reset(value: TType, skipSetPreviousValue?: boolean): AccessableFormControl;
-    markAsUsed(): AccessableFormControl;
-    markAsUnused(): AccessableFormControl;
-    markAsDirty(): AccessableFormControl;
-    markAsTouched(): AccessableFormControl;
-    disable(): AccessableFormControl;
-    enable(): AccessableFormControl;
+    validateWith(validators?: IValidator[], opts?: IAccessableFormOptions): AccessableFormControl;
+    setValue(value: any, skipSetPreviousValue?: boolean, opts?: IAccessableFormOptions): AccessableFormControl;
+    reset(value: TType, skipSetPreviousValue?: boolean, opts?: IAccessableFormOptions): AccessableFormControl;
+    markAsUsed(opts?: IAccessableFormOptions): AccessableFormControl;
+    markAsUnused(opts?: IAccessableFormOptions): AccessableFormControl;
+    markAsDirty(opts?: IAccessableFormOptions): AccessableFormControl;
+    markAsTouched(opts?: IAccessableFormOptions): AccessableFormControl;
+    disable(opts?: IAccessableFormOptions): AccessableFormControl;
+    enable(opts?: IAccessableFormOptions): AccessableFormControl;
     blockControls(): void;
     unblockControls(): void;
     get disabled(): boolean;
