@@ -1386,9 +1386,10 @@ class AccessableControlFactory {
         return control;
     }
     static momentDateControl(formState = null, validators) {
-        const control = AccessableControlFactory.simpleControl(formState, validators);
+        const control = AccessableControlFactory.simpleControl(null, validators);
         control.showAs = TypeConverter.asGermanDate;
         control.convertTo = TypeConverter.toMoment;
+        control.setValue(formState);
         return control;
     }
     /** Schneides alle Whitespaces am Ende und Anfang weg */
