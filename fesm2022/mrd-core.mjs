@@ -1275,7 +1275,7 @@ class TypeConverter {
                 return moment__default(value, 'YYYY-MM-DD').utc(true);
             }
         }
-        return undefined;
+        return value;
     }
     static asGermanDate(value) {
         if (value === null || value === undefined) {
@@ -1283,7 +1283,7 @@ class TypeConverter {
         }
         const mDate = TypeConverter.toMoment(value);
         if (!moment__default.isMoment(mDate) || !mDate.isValid()) {
-            return undefined;
+            return value.toString();
         }
         return mDate.format('DD.MM.YYYY');
     }
