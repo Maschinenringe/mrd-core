@@ -1261,28 +1261,28 @@ class TypeConverter {
         return value.toString().replace('.', ',');
     }
     static toMoment(value) {
-        if (!value) {
-            return null;
+        if (value === null || value === undefined) {
+            return undefined;
         }
         if (moment__default.isMoment(value)) {
-            return value;
+            return value.utc(true);
         }
         if (_.isString(value)) {
             if (TypeConverter.DATE_REGEX.test(value)) {
-                return moment__default(value, 'DD.MM.YYYY');
+                return moment__default(value, 'DD.MM.YYYY').utc(true);
             }
             if (TypeConverter.DATE_REGEX_INPUT.test(value)) {
-                return moment__default(value, 'YYYY-MM-DD');
+                return moment__default(value, 'YYYY-MM-DD').utc(true);
             }
         }
-        return moment__default(value);
+        return undefined;
     }
     static asGermanDate(value) {
-        if (!value) {
+        if (value === null || value === undefined) {
             return undefined;
         }
         const mDate = TypeConverter.toMoment(value);
-        if (!mDate.isValid()) {
+        if (!moment__default.isMoment(mDate) || !mDate.isValid()) {
             return undefined;
         }
         return mDate.format('DD.MM.YYYY');
