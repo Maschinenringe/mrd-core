@@ -1,5 +1,5 @@
 import { FormGroup } from '@angular/forms';
-import { IAccessableFormControl } from '../../interface/validation/i-accessable-form-control';
+import { IAccessableFormControl, IAccessableFormOptions } from '../../interface/validation/i-accessable-form-control';
 import { Observable } from 'rxjs';
 export declare abstract class AccessableFormGroup<TFields, TModel extends object> implements IAccessableFormControl<AccessableFormGroup<TFields, TModel>, TModel> {
     control: FormGroup;
@@ -17,8 +17,8 @@ export declare abstract class AccessableFormGroup<TFields, TModel extends object
     get dirty(): boolean;
     get valid(): boolean;
     get touched(): boolean;
-    disable(): AccessableFormGroup<TFields, TModel>;
-    enable(): AccessableFormGroup<TFields, TModel>;
+    disable(opts?: IAccessableFormOptions): AccessableFormGroup<TFields, TModel>;
+    enable(opts?: IAccessableFormOptions): AccessableFormGroup<TFields, TModel>;
     get disabled(): boolean;
     get enabled(): boolean;
     get valueChanges(): Observable<void>;

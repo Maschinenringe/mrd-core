@@ -617,12 +617,12 @@ class AccessableFormGroup {
     get touched() {
         return this.control.touched;
     }
-    disable() {
-        this.control.disable();
+    disable(opts) {
+        this.control.disable(opts);
         return this;
     }
-    enable() {
-        this.control.enable();
+    enable(opts) {
+        this.control.enable(opts);
         return this;
     }
     get disabled() {
@@ -647,6 +647,8 @@ class AccessableFormArray {
     required$ = false;
     entries$;
     previousEntries$;
+    disabled$ = false;
+    enabled$ = true;
     initialize(type) {
         this.control = new FormArray([]);
         this.type = type;
@@ -660,6 +662,9 @@ class AccessableFormArray {
         const item = this.generateFormEntry(entry);
         this.entries$.push(item);
         this.control.push(item.control, opts);
+        if (this.disabled$) {
+            item.disable();
+        }
         return item;
     }
     removeAt(index, skipSetPreviousEntries = false, opts) {
@@ -745,12 +750,46 @@ class AccessableFormArray {
     get valueChanges() {
         return this.control.valueChanges;
     }
-    disable(opts) {
+    get disabled() {
+        return this.disabled$;
+    }
+    get enabled() {
+        return this.enabled$;
+    }
+    get controlDisabled() {
+        return this.control.disabled;
+    }
+    get controlEnabled() {
+        return this.control.enabled;
+    }
+    controlDisable(opts) {
         this.control.disable(opts);
         return this;
     }
-    enable(opts) {
+    controlEnable(opts) {
         this.control.enable(opts);
+        if (opts?.onlySelf !== true) {
+            for (const entry of this.entries$) {
+                entry.enable();
+            }
+        }
+        return this;
+    }
+    disable(opts) {
+        this.disabled$ = true;
+        this.enabled$ = false;
+        // this.control.disable(opts);
+        if (opts?.onlySelf !== true) {
+            for (const entry of this.entries$) {
+                entry.disable();
+            }
+        }
+        return this;
+    }
+    enable(opts) {
+        this.disabled$ = false;
+        this.enabled$ = true;
+        // this.control.enable(opts);
         if (opts?.onlySelf !== true) {
             for (const entry of this.entries$) {
                 entry.enable();
@@ -806,6 +845,9 @@ class AccessableFormArray {
             for (const model of models) {
                 this.push(model);
             }
+        }
+        if (this.disabled$) {
+            this.disable();
         }
         return this;
     }

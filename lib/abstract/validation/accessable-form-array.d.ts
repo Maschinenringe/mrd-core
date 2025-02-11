@@ -13,6 +13,8 @@ export declare abstract class AccessableFormArray<TModel> implements IAccessable
     private required$;
     private entries$;
     private previousEntries$;
+    private disabled$;
+    private enabled$;
     initialize(type: Type<IAccessableFormControl<any, any>>): void;
     push(entry: TModel, skipSetPreviousEntries?: boolean, opts?: IAccessableFormOptions): IAccessableFormControl<any, TModel>;
     removeAt(index: number, skipSetPreviousEntries?: boolean, opts?: IAccessableFormOptions): void;
@@ -30,6 +32,12 @@ export declare abstract class AccessableFormArray<TModel> implements IAccessable
     get entries(): IAccessableFormControl<any, TModel>[];
     get previousEntries(): IAccessableFormControl<any, TModel>[];
     get valueChanges(): Observable<any>;
+    get disabled(): boolean;
+    get enabled(): boolean;
+    get controlDisabled(): boolean;
+    get controlEnabled(): boolean;
+    controlDisable(opts?: IAccessableFormOptions): AccessableFormArray<TModel>;
+    controlEnable(opts?: IAccessableFormOptions): AccessableFormArray<TModel>;
     disable(opts?: IAccessableFormOptions): AccessableFormArray<TModel>;
     enable(opts?: IAccessableFormOptions): AccessableFormArray<TModel>;
     markAsDirty(opts?: IAccessableFormOptions): AccessableFormArray<TModel>;
