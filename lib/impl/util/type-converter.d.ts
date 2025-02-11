@@ -1,8 +1,13 @@
+import moment from 'moment';
 export declare abstract class TypeConverter {
+    private static readonly DATE_REGEX;
+    private static readonly DATE_REGEX_INPUT;
     /** Versucht den Wert in eine Zahl zu konvertieren. */
     static toNumber(value: string | number): number | string;
     /** Nimmt eine Zahl und gibt eine deutsche Representation dieses Wertes zurück */
     static asGermanFloat(value: number | string, stellen?: number): string | undefined;
+    static toMoment(value: string | moment.Moment): moment.Moment;
+    static asGermanDate(value: string | moment.Moment): string;
     /** Erzeugt ein moment object und setzt dieses auf UTC, falls dies noch nicht geschehen ist. */
     /** Konvertiert ein moment Object in die lokale Zeitzone (Entfernt UTC) */
     static booleanNumberToSting(n: number): string;

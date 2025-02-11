@@ -5,6 +5,7 @@ import * as i0 from '@angular/core';
 import { Directive } from '@angular/core';
 import { FormControl, FormGroup, FormArray } from '@angular/forms';
 import * as moment from 'moment';
+import moment__default from 'moment';
 
 /** Diese Klasse kümmert sich um die Speicherverwaltung von Subscriptions.
  Diese erzeugen Memory-Leaks, wenn sie nicht sauber gelöscht werden. */
@@ -1230,6 +1231,8 @@ class ValidatorPostalCode {
 }
 
 class TypeConverter {
+    static DATE_REGEX = /(\d{2}).(\d{2}).(\d{4})/;
+    static DATE_REGEX_INPUT = /(\d{4})-(\d{2})-(\d{2})/;
     /** Versucht den Wert in eine Zahl zu konvertieren. */
     static toNumber(value) {
         // Falls null oder undefined übergeben wurde, brechen wir ab
@@ -1256,6 +1259,33 @@ class TypeConverter {
             value = value.toFixed(stellen);
         }
         return value.toString().replace('.', ',');
+    }
+    static toMoment(value) {
+        if (!value) {
+            return null;
+        }
+        if (moment__default.isMoment(value)) {
+            return value;
+        }
+        if (_.isString(value)) {
+            if (TypeConverter.DATE_REGEX.test(value)) {
+                return moment__default(value, 'DD.MM.YYYY');
+            }
+            if (TypeConverter.DATE_REGEX_INPUT.test(value)) {
+                return moment__default(value, 'YYYY-MM-DD');
+            }
+        }
+        return moment__default(value);
+    }
+    static asGermanDate(value) {
+        if (!value) {
+            return undefined;
+        }
+        const mDate = TypeConverter.toMoment(value);
+        if (!mDate.isValid()) {
+            return undefined;
+        }
+        return mDate.format('DD.MM.YYYY');
     }
     /** Erzeugt ein moment object und setzt dieses auf UTC, falls dies noch nicht geschehen ist. */
     /*public static utcDate(...args: any[]): moment.Moment {
@@ -1353,6 +1383,12 @@ class AccessableControlFactory {
     }
     static dateControl(formState = null, validators) {
         const control = AccessableControlFactory.simpleControl(formState, validators);
+        return control;
+    }
+    static momentDateControl(formState = null, validators) {
+        const control = AccessableControlFactory.simpleControl(formState, validators);
+        control.showAs = TypeConverter.asGermanDate;
+        control.convertTo = TypeConverter.toMoment;
         return control;
     }
     /** Schneides alle Whitespaces am Ende und Anfang weg */
