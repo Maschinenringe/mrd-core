@@ -574,20 +574,26 @@ class AccessableFormGroup {
             });
         });
     }
-    markAsUsed() {
-        _.each(this.fields$, (field) => field.markAsUsed());
+    markAsUsed(opts) {
+        this.control.markAsDirty(opts);
+        this.control.markAsTouched(opts);
+        _.each(this.fields$, (field) => field.markAsUsed(opts));
         return this;
     }
-    markAsUnused() {
-        _.each(this.fields$, (field) => field.markAsUnused());
+    markAsUnused(opts) {
+        this.control.markAsPristine(opts);
+        this.control.markAsUntouched(opts);
+        _.each(this.fields$, (field) => field.markAsUnused(opts));
         return this;
     }
-    markAsDirty() {
-        _.each(this.fields$, (field) => field.markAsDirty());
+    markAsDirty(opts) {
+        this.control.markAsDirty(opts);
+        _.each(this.fields$, (field) => field.markAsDirty(opts));
         return this;
     }
-    markAsTouched() {
-        _.each(this.fields$, (field) => field.markAsTouched());
+    markAsTouched(opts) {
+        this.control.markAsTouched(opts);
+        _.each(this.fields$, (field) => field.markAsTouched(opts));
         return this;
     }
     reset(model, propagateChanges = true) {
@@ -768,7 +774,7 @@ class AccessableFormArray {
     }
     controlEnable(opts) {
         this.control.enable(opts);
-        if (opts?.onlySelf !== true) {
+        if (!opts || opts?.onlySelf !== true) {
             for (const entry of this.entries$) {
                 entry.enable();
             }
@@ -779,7 +785,7 @@ class AccessableFormArray {
         this.disabled$ = true;
         this.enabled$ = false;
         // this.control.disable(opts);
-        if (opts?.onlySelf !== true) {
+        if (!opts || opts?.onlySelf !== true) {
             for (const entry of this.entries$) {
                 entry.disable();
             }
@@ -790,7 +796,7 @@ class AccessableFormArray {
         this.disabled$ = false;
         this.enabled$ = true;
         // this.control.enable(opts);
-        if (opts?.onlySelf !== true) {
+        if (!opts || opts?.onlySelf !== true) {
             for (const entry of this.entries$) {
                 entry.enable();
             }
@@ -799,7 +805,7 @@ class AccessableFormArray {
     }
     markAsDirty(opts) {
         this.control.markAsDirty(opts);
-        if (opts?.onlySelf !== true) {
+        if (!opts || opts?.onlySelf !== true) {
             for (const entry of this.entries$) {
                 entry.markAsDirty();
             }
@@ -808,7 +814,7 @@ class AccessableFormArray {
     }
     markAsTouched(opts) {
         this.control.markAsTouched(opts);
-        if (opts?.onlySelf !== true) {
+        if (!opts || opts?.onlySelf !== true) {
             for (const entry of this.entries$) {
                 entry.markAsTouched();
             }
@@ -818,7 +824,7 @@ class AccessableFormArray {
     markAsUnused(opts) {
         this.control.markAsUntouched(opts);
         this.control.markAsPristine(opts);
-        if (opts?.onlySelf !== true) {
+        if (!opts || opts?.onlySelf !== true) {
             for (const entry of this.entries$) {
                 entry.markAsUnused();
             }
@@ -828,7 +834,7 @@ class AccessableFormArray {
     markAsUsed(opts) {
         this.control.markAsTouched(opts);
         this.control.markAsDirty(opts);
-        if (opts?.onlySelf !== true) {
+        if (!opts || opts?.onlySelf !== true) {
             for (const entry of this.entries$) {
                 entry.markAsUsed();
             }

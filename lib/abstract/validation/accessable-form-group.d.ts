@@ -7,10 +7,10 @@ export declare abstract class AccessableFormGroup<TFields, TModel extends object
     private changed$;
     private fieldChanged$;
     initialize(fields: TFields): void;
-    markAsUsed(): AccessableFormGroup<TFields, TModel>;
-    markAsUnused(): AccessableFormGroup<TFields, TModel>;
-    markAsDirty(): AccessableFormGroup<TFields, TModel>;
-    markAsTouched(): AccessableFormGroup<TFields, TModel>;
+    markAsUsed(opts?: IAccessableFormOptions): AccessableFormGroup<TFields, TModel>;
+    markAsUnused(opts?: IAccessableFormOptions): AccessableFormGroup<TFields, TModel>;
+    markAsDirty(opts?: IAccessableFormOptions): AccessableFormGroup<TFields, TModel>;
+    markAsTouched(opts?: IAccessableFormOptions): AccessableFormGroup<TFields, TModel>;
     reset(model: TModel, propagateChanges?: boolean): AccessableFormGroup<TFields, TModel>;
     get fields(): TFields;
     get value(): TModel;
