@@ -6,6 +6,7 @@ export declare abstract class AccessableControlFactory {
     static numberBooleanControl(formState: any, validators: IValidator[]): AccessableFormControl;
     static numberDigitsControl(formState: any, validators: IValidator[], digits?: number): AccessableFormControl;
     static dateControl(formState: any, validators: IValidator[]): AccessableFormControl;
+    static momentDateControl(formState: string | moment.Moment | null, validators: IValidator[]): AccessableFormControl;
     /** Schneides alle Whitespaces am Ende und Anfang weg */
     static trimControl(formState: any, validators: IValidator[]): AccessableFormControl;
 }
