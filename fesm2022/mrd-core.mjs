@@ -576,25 +576,25 @@ class AccessableFormGroup {
         });
     }
     markAsUsed(opts) {
+        _.each(this.fields$, (field) => field.markAsUsed(opts));
         this.control.markAsDirty(opts);
         this.control.markAsTouched(opts);
-        _.each(this.fields$, (field) => field.markAsUsed(opts));
         return this;
     }
     markAsUnused(opts) {
+        _.each(this.fields$, (field) => field.markAsUnused(opts));
         this.control.markAsPristine(opts);
         this.control.markAsUntouched(opts);
-        _.each(this.fields$, (field) => field.markAsUnused(opts));
         return this;
     }
     markAsDirty(opts) {
-        this.control.markAsDirty(opts);
         _.each(this.fields$, (field) => field.markAsDirty(opts));
+        this.control.markAsDirty(opts);
         return this;
     }
     markAsTouched(opts) {
-        this.control.markAsTouched(opts);
         _.each(this.fields$, (field) => field.markAsTouched(opts));
+        this.control.markAsTouched(opts);
         return this;
     }
     reset(model, propagateChanges = true) {
@@ -805,41 +805,41 @@ class AccessableFormArray {
         return this;
     }
     markAsDirty(opts) {
-        this.control.markAsDirty(opts);
         if (!opts || opts?.onlySelf !== true) {
             for (const entry of this.entries$) {
                 entry.markAsDirty();
             }
         }
+        this.control.markAsDirty(opts);
         return this;
     }
     markAsTouched(opts) {
-        this.control.markAsTouched(opts);
         if (!opts || opts?.onlySelf !== true) {
             for (const entry of this.entries$) {
                 entry.markAsTouched();
             }
         }
+        this.control.markAsTouched(opts);
         return this;
     }
     markAsUnused(opts) {
-        this.control.markAsUntouched(opts);
-        this.control.markAsPristine(opts);
         if (!opts || opts?.onlySelf !== true) {
             for (const entry of this.entries$) {
                 entry.markAsUnused();
             }
         }
+        this.control.markAsUntouched(opts);
+        this.control.markAsPristine(opts);
         return this;
     }
     markAsUsed(opts) {
-        this.control.markAsTouched(opts);
-        this.control.markAsDirty(opts);
         if (!opts || opts?.onlySelf !== true) {
             for (const entry of this.entries$) {
                 entry.markAsUsed();
             }
         }
+        this.control.markAsTouched(opts);
+        this.control.markAsDirty(opts);
         return this;
     }
     reset(models, skipSetPreviousEntries = false) {
