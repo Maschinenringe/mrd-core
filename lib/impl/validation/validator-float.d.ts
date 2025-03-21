@@ -1,8 +1,8 @@
 import { IValidator } from '../../interface/validation/i-validator';
 import { ValidatorFn } from '@angular/forms';
 export declare class ValidatorFloat implements IValidator {
-    private digitsBefore?;
-    private digitsAfter?;
+    digitsBefore?: number;
+    digitsAfter?: number;
     hasError: boolean;
     error: string;
     private value;

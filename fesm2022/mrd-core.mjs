@@ -1032,6 +1032,8 @@ const REGEX = {
     NUMBER: /^-?[0-9]+([,.][0-9]+)?$/,
     /** Die Representation einer (Gleitkomma)Zahl, die der Anwender eingeben darf */
     INPUT_NUMBER: /^[0-9]+(,[0-9]+)?$/,
+    /** Regex um wirklich jede Zahl, auch mit Tausendertrennpunkten, zu erkennen, aber invalide Zahlen auszuschließen */
+    ALL_NUMBERS: /-?^(?![\.\,A-Za-z])(((?:\d{1,3}(?:\.\d{3}(?!\d))+|\d{4,})|(?:(?![\.A-Za-z])\d+(?![\.A-Za-z])))(?:,\d+)?)(?![,A-Za-z])/g,
     INTEGER: /^[0-9]+$/,
     SIGNED_INTEGER: /^-?[0-9]+$/,
     /** Offizieller RFC 5322 Standart regex */
@@ -1122,8 +1124,8 @@ class ValidatorFloat {
         if (!this.value) {
             return null;
         }
-        if (this.value && REGEX.INPUT_NUMBER.test(this.value.toString())) {
-            const numberSplitted = this.value.toString().split(',');
+        if (this.value && REGEX.ALL_NUMBERS.test(this.value.toString())) {
+            const numberSplitted = this.value.toString().replace('.', '').split(',');
             if (Util.isDefined(this.digitsBefore) && this.digitsAfter === 0 && numberSplitted.length === 2) {
                 this.hasError = true;
                 this.error = 'Es sind keine Nachkommastellen erlaubt';
@@ -1384,6 +1386,80 @@ class AccessableControlFactory {
             return TypeConverter.asGermanFloat(n, digits);
         };
         control.convertTo = TypeConverter.toNumber;
+        control.setValue(formState);
+        return control;
+    }
+    /**
+       * Erzeuge eine AccessableFormControl für eine Zahl mit {digits} oder {minDigits}/{maxDigits} Nachkommastellen und einem Tausenderpunkt.
+       */
+    static numberDigitsThousandControl(formState = null, validators, digits = 3, trennpunkt = true, minDigits, maxDigits = 999) {
+        let validatorFloat = _.find(validators, (v) => v instanceof ValidatorFloat);
+        if (!Util.isDefined(validatorFloat)) {
+            validatorFloat = new ValidatorFloat(null, digits ?? maxDigits);
+            validators.push(validatorFloat);
+        }
+        const control = AccessableControlFactory.simpleControl(null, validators);
+        if (!trennpunkt) {
+            control.showAs = (n) => {
+                if (Util.isDefined(digits)) {
+                    return TypeConverter.asGermanFloat(n, digits);
+                }
+                else if (Util.isDefined(minDigits) && Util.isDefined(maxDigits)) {
+                    if (!Util.isDefined(n)) {
+                        return undefined;
+                    }
+                    if (!_.isNumber(n) || _.isNaN(Number(n))) {
+                        return n.toString();
+                    }
+                    return Number(Number(n).toFixed(maxDigits)).toLocaleString('de-DE', {
+                        minimumFractionDigits: minDigits,
+                        maximumFractionDigits: maxDigits
+                    }).replace('.', '');
+                }
+                else {
+                    return TypeConverter.asGermanFloat(n);
+                }
+            };
+            control.convertTo = TypeConverter.toNumber;
+        }
+        else {
+            control.showAs = (n) => {
+                if (!Util.isDefined(n)) {
+                    return undefined;
+                }
+                if (!_.isNumber(n) || _.isNaN(Number(n))) {
+                    return n.toString();
+                }
+                if (Util.isDefined(digits)) {
+                    minDigits = digits;
+                    maxDigits = digits;
+                }
+                else if (!Util.isDefined(minDigits) && !Util.isDefined(maxDigits)) {
+                    minDigits = 3;
+                    maxDigits = 3;
+                }
+                return Number(Number(n).toFixed(maxDigits)).toLocaleString('de-DE', {
+                    minimumFractionDigits: minDigits,
+                    maximumFractionDigits: maxDigits
+                });
+            };
+            control.convertTo = (value) => {
+                // Falls null oder undefined übergeben wurde, brechen wir ab
+                if (!value) {
+                    return value;
+                }
+                // Falls der Wert bereits eine Zahl ist, sind wir fertig
+                if (_.isNumber(value)) {
+                    return value;
+                }
+                // Falls der Wert ein String ist, testen wir, ob er aussieht wie eine Zahl und versuchen ihn anschließend zu konvertieren
+                if (_.isString(value) && REGEX.ALL_NUMBERS.test(value)) {
+                    return Number.parseFloat(value.replace(/\./g, '').replace(',', '.'));
+                }
+                // Wir haben keine Regel für die Konvertierung gefunden
+                return value;
+            };
+        }
         control.setValue(formState);
         return control;
     }

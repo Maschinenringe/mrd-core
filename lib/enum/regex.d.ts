@@ -4,6 +4,8 @@ export declare const REGEX: {
     NUMBER: RegExp;
     /** Die Representation einer (Gleitkomma)Zahl, die der Anwender eingeben darf */
     INPUT_NUMBER: RegExp;
+    /** Regex um wirklich jede Zahl, auch mit Tausendertrennpunkten, zu erkennen, aber invalide Zahlen auszuschließen */
+    ALL_NUMBERS: RegExp;
     INTEGER: RegExp;
     SIGNED_INTEGER: RegExp;
     /** Offizieller RFC 5322 Standart regex */
