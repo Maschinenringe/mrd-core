@@ -2,6 +2,7 @@ import { FormArray, FormControl, FormGroup } from '@angular/forms';
 import { Observable } from 'rxjs';
 export interface IAccessableFormControl<TControlType, TType> {
     value: TType;
+    rawValue: any;
     dirty: boolean;
     touched: boolean;
     valid: boolean;

@@ -423,6 +423,7 @@ class AccessableFormControl {
     validators$;
     blocked$;
     previousValue$ = null;
+    rawValue$;
     initialize(formState, validators) {
         this.control = new FormControl(formState, null);
         this.validateWith(validators);
@@ -446,6 +447,7 @@ class AccessableFormControl {
         if (!skipSetPreviousValue) {
             this.previousValue = this.value;
         }
+        this.rawValue$ = value;
         if (this.showAs) {
             this.control.setValue(this.showAs(value), opts);
         }
@@ -458,6 +460,7 @@ class AccessableFormControl {
         if (!skipSetPreviousValue) {
             this.previousValue = this.value;
         }
+        this.rawValue$ = value;
         if (this.showAs) {
             this.control.reset(this.showAs(value), opts);
         }
@@ -539,6 +542,9 @@ class AccessableFormControl {
             });
         });
     }
+    get rawValue() {
+        return this.rawValue$;
+    }
     get previousValue() {
         return this.previousValue$;
     }
@@ -613,6 +619,11 @@ class AccessableFormGroup {
     get value() {
         const ret = {};
         _.each(this.fields$, (field, key) => ret[key] = field.value);
+        return ret;
+    }
+    get rawValue() {
+        const ret = {};
+        _.each(this.fields$, (field, key) => ret[key] = field.rawValue);
         return ret;
     }
     get dirty() {
@@ -745,6 +756,13 @@ class AccessableFormArray {
         const ret = [];
         for (const entry of this.entries$) {
             ret.push(entry.value);
+        }
+        return ret;
+    }
+    get rawValue() {
+        const ret = [];
+        for (const entry of this.entries$) {
+            ret.push(entry.rawValue);
         }
         return ret;
     }

@@ -14,6 +14,7 @@ export declare abstract class AccessableFormGroup<TFields, TModel extends object
     reset(model: TModel, propagateChanges?: boolean): AccessableFormGroup<TFields, TModel>;
     get fields(): TFields;
     get value(): TModel;
+    get rawValue(): any;
     get dirty(): boolean;
     get valid(): boolean;
     get touched(): boolean;

@@ -29,6 +29,7 @@ export declare abstract class AccessableFormArray<TModel> implements IAccessable
     get touched(): boolean;
     get valid(): boolean;
     get value(): TModel[];
+    get rawValue(): TModel[];
     get entries(): IAccessableFormControl<any, TModel>[];
     get previousEntries(): IAccessableFormControl<any, TModel>[];
     get valueChanges(): Observable<any>;

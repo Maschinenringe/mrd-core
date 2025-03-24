@@ -10,6 +10,7 @@ export declare class AccessableFormControl<TType = any> implements IAccessableFo
     private validators$;
     private blocked$;
     private previousValue$;
+    private rawValue$;
     initialize(formState?: any, validators?: IValidator[]): void;
     validateWith(validators?: IValidator[], opts?: IAccessableFormOptions): AccessableFormControl;
     setValue(value: any, skipSetPreviousValue?: boolean, opts?: IAccessableFormOptions): AccessableFormControl;
@@ -29,6 +30,7 @@ export declare class AccessableFormControl<TType = any> implements IAccessableFo
     get value(): any;
     set value(value: any);
     get valueChanges(): Observable<any>;
+    get rawValue(): any;
     get previousValue(): any;
     set previousValue(value: any);
     get required(): boolean;
