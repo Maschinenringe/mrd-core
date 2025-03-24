@@ -31,6 +31,7 @@ export declare class AccessableFormControl<TType = any> implements IAccessableFo
     set value(value: any);
     get valueChanges(): Observable<any>;
     get rawValue(): any;
+    get rawValueAsType(): TType;
     get previousValue(): any;
     set previousValue(value: any);
     get required(): boolean;

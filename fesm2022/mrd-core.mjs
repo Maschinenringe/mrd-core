@@ -545,6 +545,9 @@ class AccessableFormControl {
     get rawValue() {
         return this.rawValue$;
     }
+    get rawValueAsType() {
+        return this.convertTo(this.rawValue);
+    }
     get previousValue() {
         return this.previousValue$;
     }
@@ -1410,14 +1413,14 @@ class AccessableControlFactory {
     /**
        * Erzeuge eine AccessableFormControl für eine Zahl mit {digits} oder {minDigits}/{maxDigits} Nachkommastellen und einem Tausenderpunkt.
        */
-    static numberDigitsThousandControl(formState = null, validators, digits = 3, trennpunkt = true, minDigits, maxDigits = 999) {
+    static numberDigitsExtendedControl(formState = null, validators, digits = 3, minDigits, maxDigits = 100) {
         let validatorFloat = _.find(validators, (v) => v instanceof ValidatorFloat);
         if (!Util.isDefined(validatorFloat)) {
             validatorFloat = new ValidatorFloat(null, digits ?? maxDigits);
             validators.push(validatorFloat);
         }
         const control = AccessableControlFactory.simpleControl(null, validators);
-        if (!trennpunkt) {
+        if (true) { // !trennpunkt
             control.showAs = (n) => {
                 if (Util.isDefined(digits)) {
                     return TypeConverter.asGermanFloat(n, digits);

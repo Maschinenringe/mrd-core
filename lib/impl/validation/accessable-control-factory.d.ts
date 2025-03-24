@@ -8,7 +8,7 @@ export declare abstract class AccessableControlFactory {
     /**
        * Erzeuge eine AccessableFormControl für eine Zahl mit {digits} oder {minDigits}/{maxDigits} Nachkommastellen und einem Tausenderpunkt.
        */
-    static numberDigitsThousandControl(formState: any, validators: IValidator[], digits?: number, trennpunkt?: boolean, minDigits?: number, maxDigits?: number): AccessableFormControl;
+    static numberDigitsExtendedControl(formState: any, validators: IValidator[], digits?: number, minDigits?: number, maxDigits?: number): AccessableFormControl;
     static dateControl(formState: any, validators: IValidator[]): AccessableFormControl;
     static momentDateControl(formState: string | moment.Moment | null, validators: IValidator[]): AccessableFormControl;
     /** Schneides alle Whitespaces am Ende und Anfang weg */
