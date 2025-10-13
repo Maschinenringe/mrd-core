@@ -1047,6 +1047,45 @@ class ValidatorCustom {
     }
 }
 
+class ValidatorDate {
+    static DATE_FORMAT = 'DD.MM.YYYY';
+    error = 'Bitte geben Sie ein gültiges Datum ein';
+    hasError = false;
+    value;
+    constructor() { }
+    validator() {
+        return (input) => {
+            this.value = input.value;
+            return this.validate();
+        };
+    }
+    validate() {
+        this.hasError = false;
+        if (!this.value) {
+            return null;
+        }
+        if (moment.isMoment(this.value)) {
+            if (moment(this.value, ValidatorDate.DATE_FORMAT, true).isValid()) {
+                if (moment(this.value, ValidatorDate.DATE_FORMAT, true).year() >= 1900) {
+                    this.hasError = false;
+                    return null;
+                }
+                else {
+                    return this._fail();
+                }
+            }
+            else {
+                return this._fail();
+            }
+        }
+        return null;
+    }
+    _fail() {
+        this.hasError = true;
+        return { invalidDate: true };
+    }
+}
+
 /** Hier werden alle von der Applikation genutzten REGEX gespeichert. */
 const REGEX = {
     /** Regex für eine Zahl. Jede Zahl sollte damit erkannt werden */
@@ -1054,7 +1093,7 @@ const REGEX = {
     /** Die Representation einer (Gleitkomma)Zahl, die der Anwender eingeben darf */
     INPUT_NUMBER: /^[0-9]+(,[0-9]+)?$/,
     /** Regex um wirklich jede Zahl, auch mit Tausendertrennpunkten, zu erkennen, aber invalide Zahlen auszuschließen */
-    ALL_NUMBERS: /-?^(?![\.\,A-Za-z])(((?:\d{1,3}(?:\.\d{3}(?!\d))+|\d{4,})|(?:(?![\.A-Za-z])\d+(?![\.A-Za-z])))(?:,\d+)?)(?![,A-Za-z])/,
+    ALL_NUMBERS: /^-?(?![\.\,A-Za-z])(((?:\d{1,3}(?:\.\d{3}(?!\d))+|\d{4,})|(?:(?![\.A-Za-z])\d+(?![\.A-Za-z])))(?:,\d+)?)(?![,A-Za-z])/,
     INTEGER: /^[0-9]+$/,
     SIGNED_INTEGER: /^-?[0-9]+$/,
     /** Offizieller RFC 5322 Standart regex */
@@ -1194,6 +1233,51 @@ class ValidatorFloat {
     }
 }
 
+class ValidatorIntegerRange {
+    minValue$;
+    maxValue$;
+    showSmallError;
+    error = 'Bitte geben Sie eine ganze Zahl ein';
+    smallError = `${Util.isDefined(this.minValue$) ? 'min: ' + this.minValue$ + (Util.isDefined(this.maxValue$) ? ', ' : '') : ''}${Util.isDefined(this.maxValue$) ? 'max: ' + this.maxValue$ : ''}`;
+    hasError;
+    value$;
+    constructor(minValue$ = undefined, maxValue$ = undefined, showSmallError = false) {
+        this.minValue$ = minValue$;
+        this.maxValue$ = maxValue$;
+        this.showSmallError = showSmallError;
+    }
+    validate() {
+        this.hasError = false;
+        if (!Util.isDefined(this.value$)) {
+            return null;
+        }
+        let checkVal;
+        if (_.isString(this.value$)) {
+            checkVal = Number.parseFloat(this.value$);
+        }
+        else {
+            checkVal = Number(this.value$);
+        }
+        if (checkVal < this.minValue$ || checkVal > this.maxValue$) {
+            if (this.showSmallError) {
+                this.error = this.smallError;
+            }
+            else {
+                this.error = `Bitte wählen Sie eine Zahl zwischen ${this.minValue$} und ${this.maxValue$}`;
+            }
+            this.hasError = true;
+            return { invalidIntegerRange: true };
+        }
+        return null;
+    }
+    validator() {
+        return (input) => {
+            this.value$ = input.value;
+            return this.validate();
+        };
+    }
+}
+
 class ValidatorInteger {
     allowNegativeValues$;
     error = 'Bitte geben Sie eine ganze Zahl ein';
@@ -1223,6 +1307,74 @@ class ValidatorInteger {
     validator() {
         return (input) => {
             this.value$ = input.value;
+            return this.validate();
+        };
+    }
+}
+
+class ValidatorLength {
+    maxLength;
+    minLength;
+    static ERROR_MAXLENGTH = 'Dieses Feld darf maximal __MAX_LENGTH__ Zeichen enthalten.';
+    static ERROR_MINLENGTH = 'Dieses Feld muss minimal __MIN_LENGTH__ Zeichen enthalten.';
+    error;
+    hasError;
+    value;
+    constructor(maxLength, minLength) {
+        this.maxLength = maxLength;
+        this.minLength = minLength;
+    }
+    validator() {
+        return (input) => {
+            this.value = input.value;
+            return this.validate();
+        };
+    }
+    validate() {
+        this.hasError = false;
+        if (this.value === null || this.value === undefined || (_.isString(this.value) && _.isEmpty(this.value))) {
+            return null;
+        }
+        if (Util.isDefined(this.maxLength)) {
+            if (this.value.toString().length > this.maxLength) {
+                this.hasError = true;
+                this.error = ValidatorLength.ERROR_MAXLENGTH.replace('__MAX_LENGTH__', this.maxLength.toString());
+                return { invalidMaxLength: true };
+            }
+        }
+        if (Util.isDefined(this.minLength)) {
+            if (this.value.toString().length < this.minLength) {
+                this.hasError = true;
+                this.error = ValidatorLength.ERROR_MINLENGTH.replace('__MIN_LENGTH__', this.minLength.toString());
+                return { invalidMinLength: true };
+            }
+        }
+        return null;
+    }
+}
+
+class ValidatorMinValue {
+    minValue$;
+    error;
+    hasError;
+    value;
+    constructor(minValue$) {
+        this.minValue$ = minValue$;
+    }
+    validate() {
+        this.hasError = false;
+        if (this.value < this.minValue$) {
+            this.error = `Bitte wählen Sie einen Wert nach dem Startwert (${this.minValue$}).`;
+            this.hasError = true;
+            return { invalidValue: true };
+        }
+        else {
+            return null;
+        }
+    }
+    validator() {
+        return (input) => {
+            this.value = input.value;
             return this.validate();
         };
     }
@@ -1820,6 +1972,18 @@ class BaseRootComponent extends BasePushStrategyObject {
             this.onNextRequested(observable, dataSet, resolver);
         }));
     }
+    /**
+       * Übernimmt die gleichen Aufgaben wie listenTo von BaseRootComponent, aber triggert nicht die Deactivator Überprüfung
+       * @param observable
+       * @param resolver
+       */
+    silentListenTo(observable, resolver) {
+        this.observables.push(observable);
+        observable.isVisible.value = true;
+        this.watch(observable.nextRequested, new SubscriptionHandler((dataSet) => {
+            resolver.resolve(this.activatedRoute, dataSet, observable);
+        }));
+    }
     ngOnDestroy() {
         super.ngOnDestroy();
         _.each(this.observables, (observable) => observable.isVisible.value = false);
@@ -2007,5 +2171,5 @@ class TimestampItemStore extends ItemStore {
  * Generated bundle index. Do not edit.
  */
 
-export { AbstractActivationGuard, AbstractActivationQueuedGuard, AbstractCachedRestservice, AbstractEntityResolver, AbstractReadonlyCachedRestservice, AbstractReadonlyRestservice, AbstractResolver, AbstractRestservice, AbstractRouteConfiguration, AbstractStoredReadonlyRestservice, AbstractStoredRestservice, AccessableControlFactory, AccessableFormArray, AccessableFormControl, AccessableFormGroup, BaseObject, BasePushStrategyObject, BaseRootComponent, DeactivationHandler, HttpStatusCodes, ItemStore, ObservableValue, REGEX, ReadonlyRestHandler, RestHandler, SubscriptionHandler, SubscriptionManager, TimestampItemStore, Type, TypeConverter, Util, ValidatorCustom, ValidatorEmail, ValidatorFixedValue, ValidatorFloat, ValidatorInteger, ValidatorPostalCode, ValidatorRequired };
+export { AbstractActivationGuard, AbstractActivationQueuedGuard, AbstractCachedRestservice, AbstractEntityResolver, AbstractReadonlyCachedRestservice, AbstractReadonlyRestservice, AbstractResolver, AbstractRestservice, AbstractRouteConfiguration, AbstractStoredReadonlyRestservice, AbstractStoredRestservice, AccessableControlFactory, AccessableFormArray, AccessableFormControl, AccessableFormGroup, BaseObject, BasePushStrategyObject, BaseRootComponent, DeactivationHandler, HttpStatusCodes, ItemStore, ObservableValue, REGEX, ReadonlyRestHandler, RestHandler, SubscriptionHandler, SubscriptionManager, TimestampItemStore, Type, TypeConverter, Util, ValidatorCustom, ValidatorDate, ValidatorEmail, ValidatorFixedValue, ValidatorFloat, ValidatorInteger, ValidatorIntegerRange, ValidatorLength, ValidatorMinValue, ValidatorPostalCode, ValidatorRequired };
 //# sourceMappingURL=mrd-core.mjs.map

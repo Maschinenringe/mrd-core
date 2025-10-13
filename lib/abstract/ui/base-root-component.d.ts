@@ -11,6 +11,12 @@ export declare abstract class BaseRootComponent extends BasePushStrategyObject i
     protected abstract activatedRoute: ActivatedRoute;
     protected observables: IEntitySelector<any>[];
     listenTo(observable: IEntitySelector<any>, resolver: AbstractEntityResolver<any, any>): void;
+    /**
+       * Übernimmt die gleichen Aufgaben wie listenTo von BaseRootComponent, aber triggert nicht die Deactivator Überprüfung
+       * @param observable
+       * @param resolver
+       */
+    silentListenTo(observable: IEntitySelector<any>, resolver: AbstractEntityResolver<any, any>): void;
     ngOnDestroy(): void;
     protected onNextRequested(observable: IEntitySelector<any>, dataSet: any, resolver: AbstractEntityResolver<any, any>): void;
     static ɵfac: i0.ɵɵFactoryDeclaration<BaseRootComponent, never>;
