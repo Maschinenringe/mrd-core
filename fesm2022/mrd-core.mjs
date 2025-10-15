@@ -1468,6 +1468,16 @@ class TypeConverter {
         }
         return mDate.format('DD.MM.YYYY');
     }
+    static asGermanTime(value, withSeconds = false, withMilliseconds = false) {
+        if (value === null || value === undefined) {
+            return undefined;
+        }
+        const mDate = TypeConverter.toMoment(value);
+        if (!moment__default.isMoment(mDate) || !mDate.isValid()) {
+            return value.toString();
+        }
+        return withMilliseconds ? mDate.format('HH:mm:ss.SSS') : withSeconds ? mDate.format('HH:mm:ss') : mDate.format('HH:mm');
+    }
     /** Erzeugt ein moment object und setzt dieses auf UTC, falls dies noch nicht geschehen ist. */
     /*public static utcDate(...args: any[]): moment.Moment {
       const isDefined = _.every(args, (arg: any) => Util.isDefined(arg));
@@ -1643,6 +1653,15 @@ class AccessableControlFactory {
     static momentDateControl(formState = null, validators) {
         const control = AccessableControlFactory.simpleControl(null, validators);
         control.showAs = TypeConverter.asGermanDate;
+        control.convertTo = TypeConverter.toMoment;
+        control.setValue(formState);
+        return control;
+    }
+    static momentTimeControl(formState = null, validators, withSeconds = false, withMilliseconds = false) {
+        const control = AccessableControlFactory.simpleControl(null, validators);
+        control.showAs = (v) => {
+            return TypeConverter.asGermanTime(v, withSeconds, withMilliseconds);
+        };
         control.convertTo = TypeConverter.toMoment;
         control.setValue(formState);
         return control;

@@ -8,6 +8,7 @@ export declare abstract class TypeConverter {
     static asGermanFloat(value: number | string, stellen?: number): string | undefined;
     static toMoment(value: string | moment.Moment): moment.Moment | string;
     static asGermanDate(value: string | moment.Moment): string;
+    static asGermanTime(value: string | moment.Moment, withSeconds?: boolean, withMilliseconds?: boolean): string;
     /** Erzeugt ein moment object und setzt dieses auf UTC, falls dies noch nicht geschehen ist. */
     /** Konvertiert ein moment Object in die lokale Zeitzone (Entfernt UTC) */
     static booleanNumberToSting(n: number): string;

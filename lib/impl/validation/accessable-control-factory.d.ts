@@ -11,6 +11,7 @@ export declare abstract class AccessableControlFactory {
     static numberDigitsExtendedControl(formState: any, validators: IValidator[], digits?: number, minDigits?: number, maxDigits?: number): AccessableFormControl;
     static dateControl(formState: any, validators: IValidator[]): AccessableFormControl;
     static momentDateControl(formState: string | moment.Moment | null, validators: IValidator[]): AccessableFormControl;
+    static momentTimeControl(formState: string | moment.Moment | null, validators: IValidator[], withSeconds?: boolean, withMilliseconds?: boolean): AccessableFormControl;
     /** Schneides alle Whitespaces am Ende und Anfang weg */
     static trimControl(formState: any, validators: IValidator[]): AccessableFormControl;
 }
