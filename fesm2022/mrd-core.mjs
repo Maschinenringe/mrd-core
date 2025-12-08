@@ -1453,7 +1453,7 @@ class TypeConverter {
                 return moment__default(value, 'DD.MM.YYYY').utc(true);
             }
             if (TypeConverter.DATE_REGEX_INPUT.test(value)) {
-                return moment__default(value, 'YYYY-MM-DD').utc(true);
+                return moment__default(value, 'YYYY-MM-DDTHH:mm:SS').utc(true);
             }
         }
         return value;
