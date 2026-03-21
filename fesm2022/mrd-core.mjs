@@ -1093,7 +1093,7 @@ const REGEX = {
     /** Die Representation einer (Gleitkomma)Zahl, die der Anwender eingeben darf */
     INPUT_NUMBER: /^[0-9]+(,[0-9]+)?$/,
     /** Regex um wirklich jede Zahl, auch mit Tausendertrennpunkten, zu erkennen, aber invalide Zahlen auszuschließen */
-    ALL_NUMBERS: /^-?(?![\.\,A-Za-z])(((?:\d{1,3}(?:\.\d{3}(?!\d))+|\d{4,})|(?:(?![\.A-Za-z])\d+(?![\.A-Za-z])))(?:,\d+)?)(?![,A-Za-z])/,
+    ALL_NUMBERS: /^-?(?![\.\,A-Za-z])(((?:\d{1,3}(?:\.\d{3}(?!\d))+|\d{4,})|(?:(?![\.A-Za-z])\d+(?![\.A-Za-z])))(?:,\d+)?)(?![,A-Za-z])$/,
     INTEGER: /^[0-9]+$/,
     SIGNED_INTEGER: /^-?[0-9]+$/,
     /** Offizieller RFC 5322 Standart regex */
