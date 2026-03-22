@@ -4,8 +4,7 @@ import { Subject, Observable, forkJoin, of } from 'rxjs';
 import * as i0 from '@angular/core';
 import { Directive } from '@angular/core';
 import { FormControl, FormGroup, FormArray } from '@angular/forms';
-import * as moment from 'moment';
-import moment__default from 'moment';
+import moment from 'moment';
 
 /** Diese Klasse kümmert sich um die Speicherverwaltung von Subscriptions.
  Diese erzeugen Memory-Leaks, wenn sie nicht sauber gelöscht werden. */
@@ -355,10 +354,10 @@ class BaseObject {
         this.$unsubscribe.next();
         this.$unsubscribe.complete();
     }
-    /** @nocollapse */ static ɵfac = function BaseObject_Factory(t) { return new (t || BaseObject)(); };
+    /** @nocollapse */ static ɵfac = function BaseObject_Factory(__ngFactoryType__) { return new (__ngFactoryType__ || BaseObject)(); };
     /** @nocollapse */ static ɵdir = /** @pureOrBreakMyCode */ i0.ɵɵdefineDirective({ type: BaseObject });
 }
-(function () { (typeof ngDevMode === "undefined" || ngDevMode) && i0.ɵsetClassMetadata(BaseObject, [{
+(() => { (typeof ngDevMode === "undefined" || ngDevMode) && i0.ɵsetClassMetadata(BaseObject, [{
         type: Directive
     }], null, null); })();
 
@@ -1238,13 +1237,15 @@ class ValidatorIntegerRange {
     maxValue$;
     showSmallError;
     error = 'Bitte geben Sie eine ganze Zahl ein';
-    smallError = `${Util.isDefined(this.minValue$) ? 'min: ' + this.minValue$ + (Util.isDefined(this.maxValue$) ? ', ' : '') : ''}${Util.isDefined(this.maxValue$) ? 'max: ' + this.maxValue$ : ''}`;
     hasError;
     value$;
     constructor(minValue$ = undefined, maxValue$ = undefined, showSmallError = false) {
         this.minValue$ = minValue$;
         this.maxValue$ = maxValue$;
         this.showSmallError = showSmallError;
+    }
+    get smallError() {
+        return `${Util.isDefined(this.minValue$) ? 'min: ' + this.minValue$ + (Util.isDefined(this.maxValue$) ? ', ' : '') : ''}${Util.isDefined(this.maxValue$) ? 'max: ' + this.maxValue$ : ''}`;
     }
     validate() {
         this.hasError = false;
@@ -1521,15 +1522,15 @@ class TypeConverter {
         if (value === null || value === undefined) {
             return undefined;
         }
-        if (moment__default.isMoment(value)) {
+        if (moment.isMoment(value)) {
             return value.utc(true);
         }
         if (_.isString(value)) {
             if (TypeConverter.DATE_REGEX.test(value)) {
-                return moment__default(value, 'DD.MM.YYYY').utc(true);
+                return moment(value, 'DD.MM.YYYY').utc(true);
             }
             if (TypeConverter.DATE_REGEX_INPUT.test(value)) {
-                return moment__default(value, 'YYYY-MM-DDTHH:mm:SS').utc(true);
+                return moment(value, 'YYYY-MM-DDTHH:mm:SS').utc(true);
             }
         }
         return value;
@@ -1539,7 +1540,7 @@ class TypeConverter {
             return undefined;
         }
         const mDate = TypeConverter.toMoment(value);
-        if (!moment__default.isMoment(mDate) || !mDate.isValid()) {
+        if (!moment.isMoment(mDate) || !mDate.isValid()) {
             return value.toString();
         }
         return mDate.format('DD.MM.YYYY');
@@ -1549,7 +1550,7 @@ class TypeConverter {
             return undefined;
         }
         const mDate = TypeConverter.toMoment(value);
-        if (!moment__default.isMoment(mDate) || !mDate.isValid()) {
+        if (!moment.isMoment(mDate) || !mDate.isValid()) {
             return value.toString();
         }
         return withMilliseconds ? mDate.format('HH:mm:ss.SSS') : withSeconds ? mDate.format('HH:mm:ss') : mDate.format('HH:mm');
@@ -1777,10 +1778,10 @@ class BasePushStrategyObject extends BaseObject {
     markForCheckIf(subject) {
         return this.watch(subject, new SubscriptionHandler(this.cdr.markForCheck.bind(this.cdr)));
     }
-    /** @nocollapse */ static ɵfac = /** @pureOrBreakMyCode */ function () { let ɵBasePushStrategyObject_BaseFactory; return function BasePushStrategyObject_Factory(t) { return (ɵBasePushStrategyObject_BaseFactory || (ɵBasePushStrategyObject_BaseFactory = i0.ɵɵgetInheritedFactory(BasePushStrategyObject)))(t || BasePushStrategyObject); }; }();
+    /** @nocollapse */ static ɵfac = /** @pureOrBreakMyCode */ (() => { let ɵBasePushStrategyObject_BaseFactory; return function BasePushStrategyObject_Factory(__ngFactoryType__) { return (ɵBasePushStrategyObject_BaseFactory || (ɵBasePushStrategyObject_BaseFactory = i0.ɵɵgetInheritedFactory(BasePushStrategyObject)))(__ngFactoryType__ || BasePushStrategyObject); }; })();
     /** @nocollapse */ static ɵdir = /** @pureOrBreakMyCode */ i0.ɵɵdefineDirective({ type: BasePushStrategyObject, features: [i0.ɵɵInheritDefinitionFeature] });
 }
-(function () { (typeof ngDevMode === "undefined" || ngDevMode) && i0.ɵsetClassMetadata(BasePushStrategyObject, [{
+(() => { (typeof ngDevMode === "undefined" || ngDevMode) && i0.ɵsetClassMetadata(BasePushStrategyObject, [{
         type: Directive
     }], null, null); })();
 
@@ -2091,10 +2092,10 @@ class BaseRootComponent extends BasePushStrategyObject {
             }
         }));
     }
-    /** @nocollapse */ static ɵfac = /** @pureOrBreakMyCode */ function () { let ɵBaseRootComponent_BaseFactory; return function BaseRootComponent_Factory(t) { return (ɵBaseRootComponent_BaseFactory || (ɵBaseRootComponent_BaseFactory = i0.ɵɵgetInheritedFactory(BaseRootComponent)))(t || BaseRootComponent); }; }();
+    /** @nocollapse */ static ɵfac = /** @pureOrBreakMyCode */ (() => { let ɵBaseRootComponent_BaseFactory; return function BaseRootComponent_Factory(__ngFactoryType__) { return (ɵBaseRootComponent_BaseFactory || (ɵBaseRootComponent_BaseFactory = i0.ɵɵgetInheritedFactory(BaseRootComponent)))(__ngFactoryType__ || BaseRootComponent); }; })();
     /** @nocollapse */ static ɵdir = /** @pureOrBreakMyCode */ i0.ɵɵdefineDirective({ type: BaseRootComponent, features: [i0.ɵɵInheritDefinitionFeature] });
 }
-(function () { (typeof ngDevMode === "undefined" || ngDevMode) && i0.ɵsetClassMetadata(BaseRootComponent, [{
+(() => { (typeof ngDevMode === "undefined" || ngDevMode) && i0.ɵsetClassMetadata(BaseRootComponent, [{
         type: Directive
     }], null, null); })();
 
