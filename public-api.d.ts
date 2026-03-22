@@ -23,6 +23,7 @@ export * from './lib/impl/validation/validator-length';
 export * from './lib/impl/validation/validator-min-value';
 export * from './lib/impl/validation/validator-postal-code';
 export * from './lib/impl/validation/validator-required';
+export * from './lib/impl/validation/validator-betriebsnummer';
 export * from './lib/impl/validation/accessable-control-factory';
 export * from './lib/interface/validation/i-validator';
 export * from './lib/enum/http-status-codes';

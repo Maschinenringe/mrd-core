@@ -1411,6 +1411,82 @@ class ValidatorPostalCode {
     }
 }
 
+var Bundesland;
+(function (Bundesland) {
+    Bundesland[Bundesland["Baden_Wuertemberg"] = 1] = "Baden_Wuertemberg";
+    Bundesland[Bundesland["Bayern"] = 2] = "Bayern";
+    Bundesland[Bundesland["Berlin"] = 3] = "Berlin";
+    Bundesland[Bundesland["Brandenburg"] = 4] = "Brandenburg";
+    Bundesland[Bundesland["Bremen"] = 5] = "Bremen";
+    Bundesland[Bundesland["Hamburg"] = 6] = "Hamburg";
+    Bundesland[Bundesland["Hessen"] = 7] = "Hessen";
+    Bundesland[Bundesland["Mecklenburg_Vorpommern"] = 8] = "Mecklenburg_Vorpommern";
+    Bundesland[Bundesland["Niedersachsen"] = 9] = "Niedersachsen";
+    Bundesland[Bundesland["Nordrhein_Westfalen"] = 10] = "Nordrhein_Westfalen";
+    Bundesland[Bundesland["Rheinland_Pfalz"] = 11] = "Rheinland_Pfalz";
+    Bundesland[Bundesland["Saarland"] = 12] = "Saarland";
+    Bundesland[Bundesland["Sachsen"] = 13] = "Sachsen";
+    Bundesland[Bundesland["Sachsen_Anhalt"] = 14] = "Sachsen_Anhalt";
+    Bundesland[Bundesland["Schleswig_Holstein"] = 15] = "Schleswig_Holstein";
+    Bundesland[Bundesland["Thueringen"] = 16] = "Thueringen";
+})(Bundesland || (Bundesland = {}));
+
+class ValidatorBetriebsnummer {
+    hasError = false;
+    _error = null;
+    value;
+    static REGEX_BY = /^(276)?09[0-9]{10}$/;
+    static REGEX_NI = /^(276)?03[0-9]{10}$/;
+    static REGEX_SH = /^(276)?01[0-9]{10}$/;
+    blRegex = ValidatorBetriebsnummer.REGEX_BY;
+    blNummer = '09';
+    constructor(idBundesland = Bundesland.Bayern, error) {
+        switch (idBundesland) {
+            case Bundesland.Bayern:
+                this.blRegex = ValidatorBetriebsnummer.REGEX_BY;
+                this.blNummer = '09';
+                break;
+            case Bundesland.Niedersachsen:
+                this.blRegex = ValidatorBetriebsnummer.REGEX_NI;
+                this.blNummer = '03';
+                break;
+            case Bundesland.Schleswig_Holstein:
+                this.blRegex = ValidatorBetriebsnummer.REGEX_SH;
+                this.blNummer = '01';
+                break;
+            default:
+                this.blRegex = ValidatorBetriebsnummer.REGEX_BY;
+                this.blNummer = '09';
+                break;
+        }
+        if (error) {
+            this._error = error;
+        }
+    }
+    get error() {
+        return this._error ?? `Die Betriebsnummer muss mit ${this.blNummer} beginnen, gefolgt von 10 Ziffern. Optional kann die Landesnummer 276 (Deutschland) vorangestellt werden.`;
+    }
+    validator() {
+        return (input) => {
+            this.value = input.value;
+            return this.validate();
+        };
+    }
+    validate() {
+        this.hasError = false;
+        if (!this.value) {
+            return null;
+        }
+        if (this.blRegex.test(this.value.toString())) {
+            return null;
+        }
+        else {
+            this.hasError = true;
+            return { invalidBetriebsnr: true };
+        }
+    }
+}
+
 class TypeConverter {
     static DATE_REGEX = /(\d{2}).(\d{2}).(\d{4})/;
     static DATE_REGEX_INPUT = /(\d{4})-(\d{2})-(\d{2})/;
@@ -2190,5 +2266,5 @@ class TimestampItemStore extends ItemStore {
  * Generated bundle index. Do not edit.
  */
 
-export { AbstractActivationGuard, AbstractActivationQueuedGuard, AbstractCachedRestservice, AbstractEntityResolver, AbstractReadonlyCachedRestservice, AbstractReadonlyRestservice, AbstractResolver, AbstractRestservice, AbstractRouteConfiguration, AbstractStoredReadonlyRestservice, AbstractStoredRestservice, AccessableControlFactory, AccessableFormArray, AccessableFormControl, AccessableFormGroup, BaseObject, BasePushStrategyObject, BaseRootComponent, DeactivationHandler, HttpStatusCodes, ItemStore, ObservableValue, REGEX, ReadonlyRestHandler, RestHandler, SubscriptionHandler, SubscriptionManager, TimestampItemStore, Type, TypeConverter, Util, ValidatorCustom, ValidatorDate, ValidatorEmail, ValidatorFixedValue, ValidatorFloat, ValidatorInteger, ValidatorIntegerRange, ValidatorLength, ValidatorMinValue, ValidatorPostalCode, ValidatorRequired };
+export { AbstractActivationGuard, AbstractActivationQueuedGuard, AbstractCachedRestservice, AbstractEntityResolver, AbstractReadonlyCachedRestservice, AbstractReadonlyRestservice, AbstractResolver, AbstractRestservice, AbstractRouteConfiguration, AbstractStoredReadonlyRestservice, AbstractStoredRestservice, AccessableControlFactory, AccessableFormArray, AccessableFormControl, AccessableFormGroup, BaseObject, BasePushStrategyObject, BaseRootComponent, DeactivationHandler, HttpStatusCodes, ItemStore, ObservableValue, REGEX, ReadonlyRestHandler, RestHandler, SubscriptionHandler, SubscriptionManager, TimestampItemStore, Type, TypeConverter, Util, ValidatorBetriebsnummer, ValidatorCustom, ValidatorDate, ValidatorEmail, ValidatorFixedValue, ValidatorFloat, ValidatorInteger, ValidatorIntegerRange, ValidatorLength, ValidatorMinValue, ValidatorPostalCode, ValidatorRequired };
 //# sourceMappingURL=mrd-core.mjs.map
