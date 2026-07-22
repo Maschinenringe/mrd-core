@@ -1,5 +1,5 @@
 export declare class Util {
-    static isDefined(obj: any): boolean;
+    static isDefined<T>(obj: T | null | undefined): obj is NonNullable<T>;
     /**
      * Prüft, ob ein Objekt definiert ist und nicht leer oder 0 ist.
      * Als nicht definiert gelten: null, undefined
