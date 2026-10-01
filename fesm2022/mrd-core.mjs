@@ -1,11 +1,10 @@
-import { take, finalize, tap, takeUntil, switchMap, catchError } from 'rxjs/operators';
-import * as _ from 'underscore';
-import { Subject, Observable, forkJoin, of } from 'rxjs';
 import * as i0 from '@angular/core';
-import { Directive } from '@angular/core';
-import { FormControl, FormGroup, FormArray } from '@angular/forms';
-import * as moment from 'moment';
-import moment__default from 'moment';
+import { Directive, inject, EnvironmentInjector, runInInjectionContext, Input, NgModule, InjectionToken, Inject } from '@angular/core';
+import { take, finalize, takeUntil, tap, switchMap, catchError } from 'rxjs/operators';
+import { Subject, of, Observable, forkJoin, isObservable, from } from 'rxjs';
+import _ from 'underscore';
+import { FormArray, FormControl, FormGroup } from '@angular/forms';
+import moment from 'moment';
 
 /** Diese Klasse kümmert sich um die Speicherverwaltung von Subscriptions.
  Diese erzeugen Memory-Leaks, wenn sie nicht sauber gelöscht werden. */
@@ -69,6 +68,79 @@ class SubscriptionManager {
             sub.unsubscribe();
             delete SubscriptionManager.subscriptions[name];
         }
+    }
+}
+
+/** Abstracte Klasse von der alle Komponenten und Services erben. Sie stellt eine Speicherverwaltung für Observables bereit. */
+class BaseObject {
+    /** Wird benutzt um Observables bei der Zerstörung einer Komponente auszulösen.
+     * Wird im ngOnDestroy ausgelöst.
+     */
+    $unsubscribe = new Subject();
+    /** Funktion zur dauerhaften Überwachung von Subscriptions. Speicher wird bei Zerstörung der Komponente freigegeben. */
+    watch(observable, handler) {
+        return observable
+            .pipe(takeUntil(this.$unsubscribe), finalize((...args) => {
+            if (handler.onFinished) {
+                handler.onFinished(...args);
+            }
+        }))
+            .subscribe((...args) => {
+            if (handler.onSuccess) {
+                handler.onSuccess(...args);
+            }
+        }, (...args) => {
+            if (handler.onError) {
+                handler.onError(...args);
+            }
+        });
+    }
+    /** Proxy für SubscriptionManager.subscribe */
+    subscribe(observable, handler) {
+        return SubscriptionManager.subscribe(observable, handler);
+    }
+    /** Proxy für SubscriptionManager.subscribeAs */
+    subscribeAs(name, observable, handler) {
+        return SubscriptionManager.subscribeAs(name, observable, handler);
+    }
+    /** Alle Observables die mit watch überwacht werden, werden hier ausgelöst. Angular kümmert sich im den Aufruf.
+     *  Falls das Kind auch das Interface 'OnDestroy' implementiert, nicht vergessen super.ngOnDestroy() auszurufen, oder der Speicher
+     *  wird nicht freigegeben.
+     */
+    ngOnDestroy() {
+        this.$unsubscribe.next();
+        this.$unsubscribe.complete();
+    }
+    /** @nocollapse */ static ɵfac = function BaseObject_Factory(t) { return new (t || BaseObject)(); };
+    /** @nocollapse */ static ɵdir = /** @pureOrBreakMyCode */ i0.ɵɵdefineDirective({ type: BaseObject });
+}
+(function () { (typeof ngDevMode === "undefined" || ngDevMode) && i0.ɵsetClassMetadata(BaseObject, [{
+        type: Directive
+    }], null, null); })();
+
+class ReadonlyRestServiceObserver {
+    onItemFetched = new Subject();
+    onItemsFetched = new Subject();
+    isFetchingItem$;
+    isFetchingItems$;
+    constructor() {
+        this.isFetchingItem$ = false;
+        this.isFetchingItems$ = false;
+    }
+    isActivate() {
+        return !this.isFetchingItem && !this.isFetchingItems;
+    }
+    set isFetchingItems(fetching) {
+        this.isFetchingItems$ = fetching;
+    }
+    get isFetchingItems() {
+        return this.isFetchingItems$;
+    }
+    set isFetchingItem(fetching) {
+        this.isFetchingItem$ = fetching;
+    }
+    get isFetchingItem() {
+        return this.isFetchingItem$;
     }
 }
 
@@ -168,61 +240,134 @@ class Util {
     }
 }
 
-class ItemStore {
-    identifier;
-    transform;
-    onChanged = new Subject();
-    items$ = {};
-    transformedItems$ = [];
-    constructor(identifier, transform) {
-        this.identifier = identifier;
-        this.transform = transform;
+class ReadonlyRestHandler {
+    http;
+    url;
+    observer;
+    identifier = '';
+    constructor(http, url, observer) {
+        this.http = http;
+        this.url = url;
+        this.observer = observer;
     }
-    updateItems(items) {
-        this.clear();
-        items = items || [];
-        for (const item of items) {
-            this.items$[item[this.identifier]] = item;
+    all(searchParams, httpOptions) {
+        this.observer.isFetchingItems = true;
+        return this.http.get(Util.armUrlWithSearchParams(this.url, searchParams), httpOptions)
+            .pipe(tap((result) => {
+            this.observer.onItemsFetched.next(result);
+        }), finalize(() => {
+            this.observer.isFetchingItems = false;
+        }));
+    }
+    show(id, getParams, httpOptions) {
+        this.observer.isFetchingItem = true;
+        return this.http.get(Util.armUrlWithSearchParams(Util.createEntityUrl(this.url, id), getParams), httpOptions)
+            .pipe(tap((result) => {
+            this.observer.onItemFetched.next(result);
+        }), finalize(() => {
+            this.observer.isFetchingItem = false;
+        }));
+    }
+}
+
+class AbstractStoredReadonlyRestservice extends BaseObject {
+    observer;
+    constructor(restServiceObserver) {
+        super();
+        this.observer = Util.isDefined(restServiceObserver) ? restServiceObserver :
+            new ReadonlyRestServiceObserver();
+    }
+    all(searchParams, httpOptions) {
+        return new ReadonlyRestHandler(this.http, this.url, this.observer).all(searchParams, httpOptions)
+            .pipe(tap((response) => {
+            this.store.updateItems(response);
+        }));
+    }
+    show(id, getParams, httpOptions) {
+        return new ReadonlyRestHandler(this.http, this.url, this.observer).show(id, getParams, httpOptions)
+            .pipe(tap((response) => {
+            this.store.update(response);
+        }));
+    }
+}
+
+class AbstractReadonlyCachedRestservice extends AbstractStoredReadonlyRestservice {
+    all(searchParams, httpOptions) {
+        if (this.store.isStoreValid()) {
+            return of(this.store.items);
         }
-        this.internalTransform$();
-    }
-    clear() {
-        this.items$ = {};
-        this.transformedItems$ = [];
-    }
-    remove(item) {
-        if (item) {
-            delete this.items$[item[this.identifier]];
-            this.internalTransform$();
+        else {
+            return super.all(searchParams, httpOptions);
         }
     }
-    removeByIdentifier(identifier) {
-        if (Util.isDefined(identifier)) {
-            delete this.items$[identifier];
-            this.internalTransform$();
+    show(id, getParams, httpOptions) {
+        if (this.store.isItemValid(id)) {
+            const lookup = {};
+            lookup[this.identifier] = id;
+            const item = _.find(this.store.items, lookup);
+            if (item) {
+                return of(item);
+            }
         }
+        return super.show(id, getParams, httpOptions);
     }
-    update(item) {
-        if (item) {
-            this.items$[item[this.identifier]] = item;
-            this.internalTransform$();
-        }
+}
+
+class RestServiceObserver extends ReadonlyRestServiceObserver {
+    onItemCreated = new Subject();
+    onItemUpdated = new Subject();
+    onItemDestroyed = new Subject();
+    onItemPartialUpdated = new Subject();
+    onItemSaved = new Subject();
+    isCreatingItem$;
+    isUpdatingItem$;
+    isDestoyingItem$;
+    isPartiallyUpdatingItem$;
+    isSavingItem$;
+    constructor() {
+        super();
+        this.isCreatingItem$ = false;
+        this.isUpdatingItem$ = false;
+        this.isDestoyingItem$ = false;
+        this.isPartiallyUpdatingItem$ = false;
     }
-    push(item) {
-        if (item) {
-            this.items$[item[this.identifier]] = item;
-            this.internalTransform$();
-        }
+    isActivate() {
+        return super.isActivate() &&
+            !this.isCreatingItem$ &&
+            !this.isUpdatingItem$ &&
+            !this.isDestoyingItem$ &&
+            !this.isPartiallyUpdatingItem$ &&
+            !this.isSavingItem$;
     }
-    internalTransform$() {
-        this.transformedItems$ = Object.values(this.items$);
-        if (this.transform) {
-            this.transformedItems$ = this.transform(this.transformedItems$);
-        }
-        this.onChanged.next(this.transformedItems$);
+    set isCreatingItem(isCreating) {
+        this.isCreatingItem$ = isCreating;
     }
-    get items() {
-        return this.transformedItems$;
+    get isCreatingItem() {
+        return this.isCreatingItem$;
+    }
+    set isUpdatingItem(isUpdating) {
+        this.isUpdatingItem$ = isUpdating;
+    }
+    get isUpdatingItem() {
+        return this.isUpdatingItem$;
+    }
+    set isDestoyingItem(isDestroying) {
+        this.isDestoyingItem$ = isDestroying;
+    }
+    get isDestoyingItem() {
+        return this.isDestoyingItem$;
+    }
+    set isPartiallyUpdatingItem(isUpdating) {
+        this.isPartiallyUpdatingItem$ = isUpdating;
+    }
+    get isPartiallyUpdatingItem() {
+        return this.isPartiallyUpdatingItem$;
+    }
+    set isSavingItem(isSaving) {
+        this.isSavingItem$ = isSaving;
+    }
+    get isSavingItem() {
+        return this.isSavingItem$;
     }
 }
 
@@ -304,6 +449,186 @@ class RestHandler {
     }
 }
 
+class AbstractCachedRestservice extends AbstractReadonlyCachedRestservice {
+    observer = new RestServiceObserver();
+    create(model, getParams, httpOptions) {
+        let request = new RestHandler(this.http, this.url, this.observer, this.identifier)
+            .create(model, getParams, httpOptions);
+        return this.modifyCreateCall(request);
+    }
+    destroy(id, getParams, httpOptions) {
+        return new RestHandler(this.http, this.url, this.observer, this.identifier)
+            .destroy(id, getParams, httpOptions)
+            .pipe(tap(() => {
+            this.store.removeByIdentifier(id);
+        }));
+    }
+    partialUpdate(model, getParams, httpOptions) {
+        return new RestHandler(this.http, this.url, this.observer, this.identifier)
+            .partialUpdate(model, getParams, httpOptions)
+            .pipe(tap((result) => {
+            this.store.update(result);
+        }));
+    }
+    save(model, getParams, httpOptions) {
+        let request = new RestHandler(this.http, this.url, this.observer, this.identifier)
+            .save(model, getParams, httpOptions);
+        if (Util.isDefined(model[this.identifier])) {
+            request = this.modifyUpdateCall(request);
+        }
+        else {
+            request = this.modifyCreateCall(request);
+        }
+        return request;
+    }
+    set(model, getParams, httpOptions) {
+        let request = new RestHandler(this.http, this.url, this.observer, this.identifier)
+            .set(model, getParams, httpOptions);
+        if (Util.isDefined(model[this.identifier])) {
+            request = this.modifyUpdateCall(request);
+        }
+        else {
+            request = this.modifyCreateCall(request);
+        }
+        return request;
+    }
+    update(model, getParams, httpOptions) {
+        let request = new RestHandler(this.http, this.url, this.observer, this.identifier)
+            .update(model, getParams, httpOptions);
+        request = this.modifyUpdateCall(request);
+        return request;
+    }
+    modifyCreateCall(observable) {
+        return observable.pipe(tap((result) => {
+            this.store.push(result);
+        }));
+    }
+    modifyUpdateCall(observable) {
+        return observable.pipe(tap((result) => {
+            this.store.update(result);
+        }));
+    }
+}
+
+class AbstractReadonlyRestservice extends BaseObject {
+    identifier = '';
+    observer;
+    constructor(restServiceObserver) {
+        super();
+        this.observer = Util.isDefined(restServiceObserver) ? restServiceObserver :
+            new ReadonlyRestServiceObserver();
+    }
+    all(searchParams, httpOptions) {
+        return new ReadonlyRestHandler(this.http, this.url, this.observer).all(searchParams, httpOptions);
+    }
+    show(id, getParams, httpOptions) {
+        return new ReadonlyRestHandler(this.http, this.url, this.observer).show(id, getParams, httpOptions);
+    }
+}
+
+class AbstractRestservice extends AbstractReadonlyRestservice {
+    constructor() {
+        super(new RestServiceObserver());
+    }
+    create(model, getParams, httpOptions) {
+        return new RestHandler(this.http, this.url, this.observer, this.identifier).create(model, getParams, httpOptions);
+    }
+    destroy(id, getParams, httpOptions) {
+        return new RestHandler(this.http, this.url, this.observer, this.identifier).destroy(id, getParams, httpOptions);
+    }
+    partialUpdate(model, getParams, httpOptions) {
+        return new RestHandler(this.http, this.url, this.observer, this.identifier)
+            .partialUpdate(model, getParams, httpOptions);
+    }
+    save(model, getParams, httpOptions) {
+        return new RestHandler(this.http, this.url, this.observer, this.identifier).save(model, getParams, httpOptions);
+    }
+    update(model, getParams, httpOptions) {
+        return new RestHandler(this.http, this.url, this.observer, this.identifier).update(model, getParams, httpOptions);
+    }
+}
+
+class AbstractStoredRestservice extends AbstractStoredReadonlyRestservice {
+    constructor() {
+        super(new RestServiceObserver());
+    }
+    create(model, getParams, httpOptions) {
+        let request = new RestHandler(this.http, this.url, this.observer, this.identifier)
+            .create(model, getParams, httpOptions);
+        return this.modifyCreateCall(request);
+    }
+    destroy(id, getParams, httpOptions) {
+        return new RestHandler(this.http, this.url, this.observer, this.identifier)
+            .destroy(id, getParams, httpOptions)
+            .pipe(tap(() => {
+            this.store.removeByIdentifier(id);
+        }));
+    }
+    partialUpdate(model, getParams, httpOptions) {
+        return new RestHandler(this.http, this.url, this.observer, this.identifier)
+            .partialUpdate(model, getParams, httpOptions)
+            .pipe(tap((result) => {
+            this.store.update(result);
+        }));
+    }
+    save(model, getParams, httpOptions) {
+        let request = new RestHandler(this.http, this.url, this.observer, this.identifier)
+            .save(model, getParams, httpOptions);
+        if (Util.isDefined(model[this.identifier])) {
+            request = this.modifyUpdateCall(request);
+        }
+        else {
+            request = this.modifyCreateCall(request);
+        }
+        return request;
+    }
+    set(model, getParams, httpOptions) {
+        let request = new RestHandler(this.http, this.url, this.observer, this.identifier)
+            .set(model, getParams, httpOptions);
+        if (Util.isDefined(model[this.identifier])) {
+            request = this.modifyUpdateCall(request);
+        }
+        else {
+            request = this.modifyCreateCall(request);
+        }
+        return request;
+    }
+    update(model, getParams, httpOptions) {
+        let request = new RestHandler(this.http, this.url, this.observer, this.identifier)
+            .update(model, getParams, httpOptions);
+        request = this.modifyUpdateCall(request);
+        return request;
+    }
+    modifyCreateCall(observable) {
+        return observable.pipe(tap((result) => {
+            this.store.push(result);
+        }));
+    }
+    modifyUpdateCall(observable) {
+        return observable.pipe(tap((result) => {
+            this.store.update(result);
+        }));
+    }
+}
+
+class AbstractActivationGuard {
+    route;
+    state;
+    canActivate(route, state) {
+        this.route = route;
+        this.state = state;
+        return this.onActivate()
+            .pipe(switchMap((result) => {
+            return this.onSuccess(result);
+        }), catchError((error) => {
+            return this.onError(error);
+        }));
+    }
+    get routeConfiguration() {
+        return this.route.data.routeConfiguration;
+    }
+}
+
 class SubscriptionHandler {
     onSuccess;
     onError;
@@ -315,52 +640,216 @@ class SubscriptionHandler {
     }
 }
 
-/** Abstracte Klasse von der alle Komponenten und Services erben. Sie stellt eine Speicherverwaltung für Observables bereit. */
-class BaseObject {
-    /** Wird benutzt um Observables bei der Zerstörung einer Komponente auszulösen.
-     * Wird im ngOnDestroy ausgelöst.
-     */
-    $unsubscribe = new Subject();
-    /** Funktion zur dauerhaften Überwachung von Subscriptions. Speicher wird bei Zerstörung der Komponente freigegeben. */
-    watch(observable, handler) {
-        return observable
-            .pipe(takeUntil(this.$unsubscribe), finalize((...args) => {
-            if (handler.onFinished) {
-                handler.onFinished(...args);
-            }
-        }))
-            .subscribe((...args) => {
-            if (handler.onSuccess) {
-                handler.onSuccess(...args);
-            }
-        }, (...args) => {
-            if (handler.onError) {
-                handler.onError(...args);
-            }
+/**
+ * Fuehrt Guards schrittweise aus: die Guards eines Schritts parallel, die Schritte nacheinander. Schlaegt ein
+ * Guard fehl, laufen die folgenden Schritte nicht mehr. In Routen als Klasse oder ueber
+ * `mapToCanActivate([...])` aus `@angular/router` verwendbar.
+ */
+class AbstractActivationQueuedGuard {
+    queue = [];
+    injector = AbstractActivationQueuedGuard.currentInjector();
+    canActivate(route, state) {
+        return new Observable((subscriber) => {
+            this.runQueueRecursive(0, route, state, subscriber);
         });
     }
-    /** Proxy für SubscriptionManager.subscribe */
-    subscribe(observable, handler) {
-        return SubscriptionManager.subscribe(observable, handler);
+    sequence(step) {
+        this.queue.push(_.isArray(step) ? step : [step]);
+        return this;
     }
-    /** Proxy für SubscriptionManager.subscribeAs */
-    subscribeAs(name, observable, handler) {
-        return SubscriptionManager.subscribeAs(name, observable, handler);
+    /** Nur ein per DI erzeugter Guard kennt seinen Injector; funktionale Schritte brauchen ihn. */
+    static currentInjector() {
+        try {
+            return inject(EnvironmentInjector);
+        }
+        catch {
+            return null;
+        }
     }
-    /** Alle Observables die mit watch überwacht werden, werden hier ausgelöst. Angular kümmert sich im den Aufruf.
-     *  Falls das Kind auch das Interface 'OnDestroy' implementiert, nicht vergessen super.ngOnDestroy() auszurufen, oder der Speicher
-     *  wird nicht freigegeben.
-     */
-    ngOnDestroy() {
-        this.$unsubscribe.next();
-        this.$unsubscribe.complete();
+    runQueueRecursive(level, route, state, subscriber) {
+        const currentQueueItems = this.queue[level];
+        if (!Util.isDefined(currentQueueItems)) {
+            subscriber.next(true);
+            subscriber.complete();
+            return;
+        }
+        const activators = _.map(currentQueueItems, (step) => {
+            return this.asObservable(this.runStep(step, route, state));
+        });
+        SubscriptionManager.subscribe(forkJoin(activators), new SubscriptionHandler((canActivateStates) => {
+            if (!_.all(canActivateStates)) {
+                subscriber.next(false);
+                subscriber.complete();
+            }
+            else {
+                this.runQueueRecursive(level + 1, route, state, subscriber);
+            }
+        }, () => {
+            subscriber.next(false);
+            subscriber.complete();
+        }));
     }
-    /** @nocollapse */ static ɵfac = function BaseObject_Factory(t) { return new (t || BaseObject)(); };
-    /** @nocollapse */ static ɵdir = /** @pureOrBreakMyCode */ i0.ɵɵdefineDirective({ type: BaseObject });
+    runStep(step, route, state) {
+        if (typeof step !== 'function') {
+            return step.canActivate(route, state);
+        }
+        if (!this.injector) {
+            throw new Error('AbstractActivationQueuedGuard: funktionale Guards brauchen einen per DI erzeugten Guard.');
+        }
+        return runInInjectionContext(this.injector, () => step(route, state));
+    }
+    /** forkJoin braucht Observables; synchrone und Promise-Ergebnisse eines Guards werden daher umgewandelt. */
+    asObservable(result) {
+        return isObservable(result) ? result : from(Promise.resolve(result));
+    }
 }
-(function () { (typeof ngDevMode === "undefined" || ngDevMode) && i0.ɵsetClassMetadata(BaseObject, [{
+
+class AbstractResolver {
+    route;
+    state;
+    resolve(route, state) {
+        this.route = route;
+        this.state = state;
+        return this.onResolve();
+    }
+    get routeConfiguration() {
+        return this.route.data.routeConfiguration;
+    }
+}
+
+class AbstractRouteConfiguration {
+    pathSegments;
+    paramNames;
+    parent;
+    constructor(pathSegments, paramNames, parent) {
+        this.pathSegments = pathSegments;
+        this.paramNames = paramNames;
+        this.parent = parent;
+    }
+    get path() {
+        if (Util.isDefined(this.parent)) {
+            return `${this.parent.path}/${this.pathSegments.join('/')}`;
+        }
+        else {
+            return this.pathSegments.join('/');
+        }
+    }
+    get paramDefinition() {
+        return _.extend(Util.isDefined(this.parent) ? this.parent.paramDefinition : {}, this.paramNames || {});
+    }
+    buildNavigation(params) {
+        let navigationParams = Util.isDefined(this.parent) ?
+            this.parent.buildNavigation(params) : [];
+        if (!Util.isDefined(params)) {
+            return navigationParams.concat(this.pathSegments);
+        }
+        navigationParams = navigationParams.concat(_.map(this.pathSegments, (segment) => {
+            const segmentInParams = params[segment.replace(':', '')];
+            if (Util.isDefined(segmentInParams)) {
+                return segmentInParams;
+            }
+            return segment;
+        }));
+        return navigationParams;
+    }
+    validate() {
+        for (const pathSnippet in this.pathSegments) {
+            if (!Util.isDefined(pathSnippet)) {
+                console.error('Creating a route without a path snippet is not allowed');
+                return false;
+            }
+            if (pathSnippet.startsWith('/')) {
+                console.error('Creating a route with a path snippet starting with a / is not allowed');
+                return false;
+            }
+            if (pathSnippet.endsWith('/')) {
+                console.error('Creating a route with a path snippet ending with a / is not allowed');
+                return false;
+            }
+        }
+        return true;
+    }
+}
+
+/** Fragt vor dem Verlassen einer Seite nach ungespeicherten Aenderungen; Komponenten ohne `canDeactivate` duerfen immer verlassen werden. */
+const deactivateGuard = (component) => component?.canDeactivate ? component.canDeactivate() : true;
+
+class BasePushStrategyObject extends BaseObject {
+    markForCheckIf(subject) {
+        return this.watch(subject, new SubscriptionHandler(this.cdr.markForCheck.bind(this.cdr)));
+    }
+    /** @nocollapse */ static ɵfac = /** @pureOrBreakMyCode */ function () { let ɵBasePushStrategyObject_BaseFactory; return function BasePushStrategyObject_Factory(t) { return (ɵBasePushStrategyObject_BaseFactory || (ɵBasePushStrategyObject_BaseFactory = i0.ɵɵgetInheritedFactory(BasePushStrategyObject)))(t || BasePushStrategyObject); }; }();
+    /** @nocollapse */ static ɵdir = /** @pureOrBreakMyCode */ i0.ɵɵdefineDirective({ type: BasePushStrategyObject, features: [i0.ɵɵInheritDefinitionFeature] });
+}
+(function () { (typeof ngDevMode === "undefined" || ngDevMode) && i0.ɵsetClassMetadata(BasePushStrategyObject, [{
         type: Directive
     }], null, null); })();
+
+class BaseRootComponent extends BasePushStrategyObject {
+    observables = [];
+    listenTo(observable, resolver) {
+        this.observables.push(observable);
+        observable.isVisible.value = true;
+        this.watch(observable.nextRequested, new SubscriptionHandler((dataSet) => {
+            this.onNextRequested(observable, dataSet, resolver);
+        }));
+    }
+    /**
+       * Übernimmt die gleichen Aufgaben wie listenTo von BaseRootComponent, aber triggert nicht die Deactivator Überprüfung
+       * @param observable
+       * @param resolver
+       */
+    silentListenTo(observable, resolver) {
+        this.observables.push(observable);
+        observable.isVisible.value = true;
+        this.watch(observable.nextRequested, new SubscriptionHandler((dataSet) => {
+            resolver.resolve(this.activatedRoute, dataSet, observable);
+        }));
+    }
+    ngOnDestroy() {
+        super.ngOnDestroy();
+        _.each(this.observables, (observable) => observable.isVisible.value = false);
+    }
+    onNextRequested(observable, dataSet, resolver) {
+        this.subscribe(this.canDeactivate(), new SubscriptionHandler((canDeactivate) => {
+            if (canDeactivate) {
+                // Maybe catch error
+                resolver.resolve(this.activatedRoute, dataSet, observable);
+            }
+        }));
+    }
+    /** @nocollapse */ static ɵfac = /** @pureOrBreakMyCode */ function () { let ɵBaseRootComponent_BaseFactory; return function BaseRootComponent_Factory(t) { return (ɵBaseRootComponent_BaseFactory || (ɵBaseRootComponent_BaseFactory = i0.ɵɵgetInheritedFactory(BaseRootComponent)))(t || BaseRootComponent); }; }();
+    /** @nocollapse */ static ɵdir = /** @pureOrBreakMyCode */ i0.ɵɵdefineDirective({ type: BaseRootComponent, features: [i0.ɵɵInheritDefinitionFeature] });
+}
+(function () { (typeof ngDevMode === "undefined" || ngDevMode) && i0.ɵsetClassMetadata(BaseRootComponent, [{
+        type: Directive
+    }], null, null); })();
+
+class AbstractEntityResolver {
+    router;
+    routeConfiguration;
+    configuration;
+    constructor(router, routeConfiguration, configuration) {
+        this.router = router;
+        this.routeConfiguration = routeConfiguration;
+        this.configuration = configuration;
+        this.configuration = configuration || AbstractEntityResolver.generateDefaultConfiguration();
+    }
+    runResolver(activatedRoute, params) {
+        const currentRouteParams = _.extend(_.clone(activatedRoute.snapshot.params), params);
+        if (this.configuration.keepQueryParams) {
+            return this.router.navigate(this.routeConfiguration.buildNavigation(currentRouteParams), { queryParams: activatedRoute.snapshot.queryParams });
+        }
+        else {
+            return this.router.navigate(this.routeConfiguration.buildNavigation(currentRouteParams));
+        }
+    }
+    static generateDefaultConfiguration() {
+        return {
+            keepQueryParams: false
+        };
+    }
+}
 
 class ValidatorRequired {
     hasError = false;
@@ -412,251 +901,6 @@ class ValidatorRequired {
             this.hasError = false;
             return null;
         }
-    }
-}
-
-class AccessableFormControl {
-    control;
-    showAs;
-    convertTo;
-    required$;
-    validators$;
-    blocked$;
-    previousValue$ = null;
-    rawValue$;
-    initialize(formState, validators) {
-        this.control = new FormControl(formState, null);
-        this.validateWith(validators);
-        this.setValue(formState, true);
-    }
-    validateWith(validators = [], opts) {
-        this.validators$ = validators;
-        this.control.setValidators(_.map(validators, (v) => {
-            return v.validator();
-        }));
-        this.required$ = false;
-        _.each(this.validators$, (v) => {
-            if (v instanceof ValidatorRequired) {
-                this.required$ = true;
-            }
-        });
-        this.control.updateValueAndValidity(opts);
-        return this;
-    }
-    setValue(value, skipSetPreviousValue = false, opts) {
-        if (!skipSetPreviousValue) {
-            this.previousValue = this.value;
-        }
-        this.rawValue$ = value;
-        if (this.showAs) {
-            this.control.setValue(this.showAs(value), opts);
-        }
-        else {
-            this.control.setValue(value, opts);
-        }
-        return this;
-    }
-    reset(value, skipSetPreviousValue = false, opts) {
-        if (!skipSetPreviousValue) {
-            this.previousValue = this.value;
-        }
-        this.rawValue$ = value;
-        if (this.showAs) {
-            this.control.reset(this.showAs(value), opts);
-        }
-        else {
-            this.control.reset(value, opts);
-        }
-        return this;
-    }
-    markAsUsed(opts) {
-        this.control.markAsDirty(opts);
-        this.control.markAsTouched(opts);
-        this.control.updateValueAndValidity(opts);
-        return this;
-    }
-    markAsUnused(opts) {
-        _.each(this.validators$, (validator) => validator.hasError = false);
-        this.control.updateValueAndValidity(opts);
-        this.control.markAsPristine(opts);
-        this.control.markAsUntouched(opts);
-        return this;
-    }
-    markAsDirty(opts) {
-        this.control.markAsDirty(opts);
-        return this;
-    }
-    markAsTouched(opts) {
-        this.control.markAsTouched(opts);
-        return this;
-    }
-    disable(opts) {
-        this.control.disable(opts);
-        return this;
-    }
-    enable(opts) {
-        this.control.enable(opts);
-        return this;
-    }
-    blockControls() {
-        this.blocked$ = true;
-    }
-    unblockControls() {
-        this.blocked$ = false;
-    }
-    get disabled() {
-        return this.control.disabled;
-    }
-    get valid() {
-        if (this.control.disabled) {
-            return true;
-        }
-        return !this.error;
-    }
-    get validators() {
-        return this.validators$;
-    }
-    get error() {
-        return _.find(this.validators$, (v) => v.hasError);
-    }
-    get value() {
-        if (this.convertTo) {
-            return this.convertTo(this.control.value);
-        }
-        else {
-            return this.control.value;
-        }
-    }
-    set value(value) {
-        this.setValue(value);
-    }
-    get valueChanges() {
-        return Observable.create((observer) => {
-            const sub = this.control.valueChanges
-                .subscribe(() => {
-                if (!this.blocked) {
-                    observer.next(this.value);
-                }
-            }, null, () => {
-                sub.unsubscribe();
-            });
-        });
-    }
-    get rawValue() {
-        return this.rawValue$;
-    }
-    get rawValueAsType() {
-        return this.convertTo(this.rawValue);
-    }
-    get previousValue() {
-        return this.previousValue$;
-    }
-    set previousValue(value) {
-        this.previousValue$ = value;
-    }
-    get required() {
-        return this.required$;
-    }
-    get touched() {
-        return this.control.touched;
-    }
-    get dirty() {
-        return this.control.dirty;
-    }
-    get blocked() {
-        return this.blocked$;
-    }
-}
-
-class AccessableFormGroup {
-    control;
-    fields$;
-    changed$ = new Subject();
-    fieldChanged$ = new Subject();
-    initialize(fields) {
-        this.control = new FormGroup(_.mapObject(fields, (field) => {
-            return field.control;
-        }));
-        this.fields$ = fields;
-        _.each(this.fields$, (field, key) => {
-            field.valueChanges.subscribe(() => {
-                this.fieldChanged$.next({ name: key, control: field });
-            });
-        });
-    }
-    markAsUsed(opts) {
-        _.each(this.fields$, (field) => field.markAsUsed(opts));
-        this.control.markAsDirty(opts);
-        this.control.markAsTouched(opts);
-        return this;
-    }
-    markAsUnused(opts) {
-        _.each(this.fields$, (field) => field.markAsUnused(opts));
-        this.control.markAsPristine(opts);
-        this.control.markAsUntouched(opts);
-        return this;
-    }
-    markAsDirty(opts) {
-        _.each(this.fields$, (field) => field.markAsDirty(opts));
-        this.control.markAsDirty(opts);
-        return this;
-    }
-    markAsTouched(opts) {
-        _.each(this.fields$, (field) => field.markAsTouched(opts));
-        this.control.markAsTouched(opts);
-        return this;
-    }
-    reset(model, propagateChanges = true) {
-        if (!Util.isDefined(model)) {
-            model = {};
-        }
-        _.each(this.fields$, (field, key) => field.reset(model[key]));
-        if (propagateChanges) {
-            this.changed$.next(this.value);
-        }
-        return this;
-    }
-    get fields() {
-        return this.fields$;
-    }
-    get value() {
-        const ret = {};
-        _.each(this.fields$, (field, key) => ret[key] = field.value);
-        return ret;
-    }
-    get rawValue() {
-        const ret = {};
-        _.each(this.fields$, (field, key) => ret[key] = field.rawValue);
-        return ret;
-    }
-    get dirty() {
-        return this.control.dirty;
-    }
-    get valid() {
-        return this.control.valid;
-    }
-    get touched() {
-        return this.control.touched;
-    }
-    disable(opts) {
-        this.control.disable(opts);
-        return this;
-    }
-    enable(opts) {
-        this.control.enable(opts);
-        return this;
-    }
-    get disabled() {
-        return this.control.disabled;
-    }
-    get enabled() {
-        return this.control.enabled;
-    }
-    get valueChanges() {
-        return this.changed$.asObservable();
-    }
-    get fieldChanges() {
-        return this.fieldChanged$.asObservable();
     }
 }
 
@@ -881,210 +1125,309 @@ class AccessableFormArray {
     }
 }
 
-class ReadonlyRestServiceObserver {
-    onItemFetched = new Subject();
-    onItemsFetched = new Subject();
-    isFetchingItem$;
-    isFetchingItems$;
-    constructor() {
-        this.isFetchingItem$ = false;
-        this.isFetchingItems$ = false;
+class AccessableFormControl {
+    control;
+    showAs;
+    convertTo;
+    required$;
+    validators$;
+    blocked$ = false;
+    previousValue$ = null;
+    rawValue$;
+    initialize(formState, validators) {
+        this.control = new FormControl(formState, null);
+        this.validateWith(validators);
+        this.setValue(formState, true);
     }
-    isActivate() {
-        return !this.isFetchingItem && !this.isFetchingItems;
-    }
-    set isFetchingItems(fetching) {
-        this.isFetchingItems$ = fetching;
-    }
-    get isFetchingItems() {
-        return this.isFetchingItems$;
-    }
-    set isFetchingItem(fetching) {
-        this.isFetchingItem$ = fetching;
-    }
-    get isFetchingItem() {
-        return this.isFetchingItem$;
-    }
-}
-
-class ReadonlyRestHandler {
-    http;
-    url;
-    observer;
-    identifier;
-    constructor(http, url, observer) {
-        this.http = http;
-        this.url = url;
-        this.observer = observer;
-    }
-    all(searchParams, httpOptions) {
-        this.observer.isFetchingItems = true;
-        return this.http.get(Util.armUrlWithSearchParams(this.url, searchParams), httpOptions)
-            .pipe(tap((result) => {
-            this.observer.onItemsFetched.next(result);
-        }), 
-        // catchError( _.bind(this.serviceErrorHandler.catchError, this.serviceErrorHandler) as (error: any) => Observable<any> ),
-        finalize(() => {
-            this.observer.isFetchingItems = false;
+    validateWith(validators = [], opts) {
+        this.validators$ = validators;
+        this.control.setValidators(_.map(validators, (v) => {
+            return v.validator();
         }));
+        this.required$ = false;
+        _.each(this.validators$, (v) => {
+            if (v instanceof ValidatorRequired) {
+                this.required$ = true;
+            }
+        });
+        this.control.updateValueAndValidity(opts);
+        return this;
     }
-    show(id, getParams, httpOptions) {
-        this.observer.isFetchingItem = true;
-        return this.http.get(Util.armUrlWithSearchParams(Util.createEntityUrl(this.url, id), getParams), httpOptions)
-            .pipe(tap((result) => {
-            this.observer.onItemFetched.next(result);
-        }), finalize(() => {
-            this.observer.isFetchingItem = false;
+    setValue(value, skipSetPreviousValue = false, opts) {
+        if (!skipSetPreviousValue) {
+            this.previousValue = this.value;
+        }
+        this.rawValue$ = value;
+        if (this.showAs) {
+            this.control.setValue(this.showAs(value), opts);
+        }
+        else {
+            this.control.setValue(value, opts);
+        }
+        return this;
+    }
+    reset(value, skipSetPreviousValue = false, opts) {
+        if (!skipSetPreviousValue) {
+            this.previousValue = this.value;
+        }
+        this.rawValue$ = value;
+        if (this.showAs) {
+            this.control.reset(this.showAs(value), opts);
+        }
+        else {
+            this.control.reset(value, opts);
+        }
+        return this;
+    }
+    markAsUsed(opts) {
+        this.control.markAsDirty(opts);
+        this.control.markAsTouched(opts);
+        this.control.updateValueAndValidity(opts);
+        return this;
+    }
+    markAsUnused(opts) {
+        _.each(this.validators$, (validator) => validator.hasError = false);
+        this.control.updateValueAndValidity(opts);
+        this.control.markAsPristine(opts);
+        this.control.markAsUntouched(opts);
+        return this;
+    }
+    markAsDirty(opts) {
+        this.control.markAsDirty(opts);
+        return this;
+    }
+    markAsTouched(opts) {
+        this.control.markAsTouched(opts);
+        return this;
+    }
+    disable(opts) {
+        this.control.disable(opts);
+        return this;
+    }
+    enable(opts) {
+        this.control.enable(opts);
+        return this;
+    }
+    blockControls() {
+        this.blocked$ = true;
+    }
+    unblockControls() {
+        this.blocked$ = false;
+    }
+    get disabled() {
+        return this.control.disabled;
+    }
+    get valid() {
+        if (this.control.disabled) {
+            return true;
+        }
+        return !this.error;
+    }
+    get validators() {
+        return this.validators$;
+    }
+    get error() {
+        return _.find(this.validators$, (v) => v.hasError);
+    }
+    get value() {
+        if (this.convertTo) {
+            return this.convertTo(this.control.value);
+        }
+        else {
+            return this.control.value;
+        }
+    }
+    set value(value) {
+        this.setValue(value);
+    }
+    get valueChanges() {
+        return Observable.create((observer) => {
+            const sub = this.control.valueChanges
+                .subscribe(() => {
+                if (!this.blocked) {
+                    observer.next(this.value);
+                }
+            }, null, () => {
+                sub.unsubscribe();
+            });
+        });
+    }
+    get rawValue() {
+        return this.rawValue$;
+    }
+    get rawValueAsType() {
+        return this.convertTo ? this.convertTo(this.rawValue) : this.rawValue;
+    }
+    get previousValue() {
+        return this.previousValue$;
+    }
+    set previousValue(value) {
+        this.previousValue$ = value;
+    }
+    get required() {
+        return this.required$;
+    }
+    get touched() {
+        return this.control.touched;
+    }
+    get dirty() {
+        return this.control.dirty;
+    }
+    get blocked() {
+        return this.blocked$;
+    }
+}
+
+class AccessableFormGroup {
+    control;
+    fields$;
+    changed$ = new Subject();
+    fieldChanged$ = new Subject();
+    initialize(fields) {
+        this.control = new FormGroup(_.mapObject(fields, (field) => {
+            return field.control;
         }));
+        this.fields$ = fields;
+        _.each(this.controls$, (field, key) => {
+            field.valueChanges.subscribe(() => {
+                this.fieldChanged$.next({ name: key, control: field });
+            });
+        });
     }
-}
-
-class AbstractReadonlyRestservice extends BaseObject {
-    identifier;
-    observer;
-    constructor(restServiceObserver) {
-        super();
-        this.observer = Util.isDefined(restServiceObserver) ? restServiceObserver :
-            new ReadonlyRestServiceObserver();
+    markAsUsed(opts) {
+        _.each(this.controls$, (field) => field.markAsUsed(opts));
+        this.control.markAsDirty(opts);
+        this.control.markAsTouched(opts);
+        return this;
     }
-    all(searchParams, httpOptions) {
-        return new ReadonlyRestHandler(this.http, this.url, this.observer).all(searchParams, httpOptions);
+    markAsUnused(opts) {
+        _.each(this.controls$, (field) => field.markAsUnused(opts));
+        this.control.markAsPristine(opts);
+        this.control.markAsUntouched(opts);
+        return this;
     }
-    show(id, getParams, httpOptions) {
-        return new ReadonlyRestHandler(this.http, this.url, this.observer).show(id, getParams, httpOptions);
+    /**
+     * `mrd-form-field` markiert ein Feld bei jedem valueChanges als dirty - auch beim Laden per reset() und bei
+     * enable()/disable(). Nach dem programmatischen Befuellen gilt das Formular damit wieder als unveraendert;
+     * `emitEvent: false`, damit die Neuvalidierung nicht erneut valueChanges und damit dirty ausloest.
+     */
+    markAsUnchanged() {
+        return this.markAsUnused({ emitEvent: false });
     }
-}
-
-class RestServiceObserver extends ReadonlyRestServiceObserver {
-    onItemCreated = new Subject();
-    onItemUpdated = new Subject();
-    onItemDestroyed = new Subject();
-    onItemPartialUpdated = new Subject();
-    onItemSaved = new Subject();
-    isCreatingItem$;
-    isUpdatingItem$;
-    isDestoyingItem$;
-    isPartiallyUpdatingItem$;
-    isSavingItem$;
-    constructor() {
-        super();
-        this.isCreatingItem$ = false;
-        this.isUpdatingItem$ = false;
-        this.isDestoyingItem$ = false;
-        this.isPartiallyUpdatingItem$ = false;
-    }
-    isActivate() {
-        return super.isActivate() &&
-            !this.isCreatingItem$ &&
-            !this.isUpdatingItem$ &&
-            !this.isDestoyingItem$ &&
-            !this.isPartiallyUpdatingItem$ &&
-            !this.isSavingItem$;
-    }
-    set isCreatingItem(isCreating) {
-        this.isCreatingItem$ = isCreating;
-    }
-    get isCreatingItem() {
-        return this.isCreatingItem$;
-    }
-    set isUpdatingItem(isUpdating) {
-        this.isUpdatingItem$ = isUpdating;
-    }
-    get isUpdatingItem() {
-        return this.isUpdatingItem$;
-    }
-    set isDestoyingItem(isDestroying) {
-        this.isDestoyingItem$ = isDestroying;
-    }
-    get isDestoyingItem() {
-        return this.isDestoyingItem$;
-    }
-    set isPartiallyUpdatingItem(isUpdating) {
-        this.isPartiallyUpdatingItem$ = isUpdating;
-    }
-    get isPartiallyUpdatingItem() {
-        return this.isPartiallyUpdatingItem$;
-    }
-    set isSavingItem(isSaving) {
-        this.isSavingItem$ = isSaving;
-    }
-    get isSavingItem() {
-        return this.isSavingItem$;
-    }
-}
-
-class AbstractRestservice extends AbstractReadonlyRestservice {
-    constructor() {
-        super(new RestServiceObserver());
-    }
-    create(model, getParams, httpOptions) {
-        return new RestHandler(this.http, this.url, this.observer, this.identifier).create(model, getParams, httpOptions);
-    }
-    destroy(id, getParams, httpOptions) {
-        return new RestHandler(this.http, this.url, this.observer, this.identifier).destroy(id, getParams, httpOptions);
-    }
-    partialUpdate(model, getParams, httpOptions) {
-        return new RestHandler(this.http, this.url, this.observer, this.identifier)
-            .partialUpdate(model, getParams, httpOptions);
-    }
-    save(model, getParams, httpOptions) {
-        return new RestHandler(this.http, this.url, this.observer, this.identifier).save(model, getParams, httpOptions);
-    }
-    update(model, getParams, httpOptions) {
-        return new RestHandler(this.http, this.url, this.observer, this.identifier).update(model, getParams, httpOptions);
-    }
-}
-
-class ValidatorCustom {
-    value;
-    constructor() {
-    }
-    validator() {
-        return null;
-    }
-    validate() {
-        return null;
-    }
-}
-
-class ValidatorDate {
-    static DATE_FORMAT = 'DD.MM.YYYY';
-    error = 'Bitte geben Sie ein gültiges Datum ein';
-    hasError = false;
-    value;
-    constructor() { }
-    validator() {
-        return (input) => {
-            this.value = input.value;
-            return this.validate();
-        };
-    }
-    validate() {
-        this.hasError = false;
-        if (!this.value) {
-            return null;
+    /**
+     * `mrd-form-field` zeigt Fehler erst nach valueChanges oder Touched/Blur des Feldes - beim Speichern
+     * unberuehrter Felder also nicht. Zeigt die Fehler aller Felder an; dirty bleibt nur, wenn der Benutzer
+     * wirklich etwas geaendert hat, sonst fragt ein Seitenwechsel grundlos nach.
+     */
+    showErrors() {
+        const warGeaendert = this.dirty;
+        this.markAsUsed();
+        if (!warGeaendert) {
+            this.control.markAsPristine();
         }
-        if (moment.isMoment(this.value)) {
-            if (moment(this.value, ValidatorDate.DATE_FORMAT, true).isValid()) {
-                if (moment(this.value, ValidatorDate.DATE_FORMAT, true).year() >= 1900) {
-                    this.hasError = false;
-                    return null;
-                }
-                else {
-                    return this._fail();
-                }
-            }
-            else {
-                return this._fail();
-            }
-        }
-        return null;
+        return this;
     }
-    _fail() {
-        this.hasError = true;
-        return { invalidDate: true };
+    markAsDirty(opts) {
+        _.each(this.controls$, (field) => field.markAsDirty(opts));
+        this.control.markAsDirty(opts);
+        return this;
+    }
+    markAsTouched(opts) {
+        _.each(this.controls$, (field) => field.markAsTouched(opts));
+        this.control.markAsTouched(opts);
+        return this;
+    }
+    reset(model, propagateChanges = true) {
+        if (!Util.isDefined(model)) {
+            model = {};
+        }
+        _.each(this.controls$, (field, key) => field.reset(model[key]));
+        if (propagateChanges) {
+            this.changed$.next(this.value);
+        }
+        return this;
+    }
+    get fields() {
+        return this.fields$;
+    }
+    /** `TFields` ist generisch und fuer underscore nicht als Objekt erkennbar; vor `initialize()` leer. */
+    get controls$() {
+        return (this.fields$ ?? {});
+    }
+    get value() {
+        const ret = {};
+        _.each(this.controls$, (field, key) => ret[key] = field.value);
+        return ret;
+    }
+    get rawValue() {
+        const ret = {};
+        _.each(this.controls$, (field, key) => ret[key] = field.rawValue);
+        return ret;
+    }
+    get dirty() {
+        return this.control.dirty;
+    }
+    get valid() {
+        return this.control.valid;
+    }
+    get touched() {
+        return this.control.touched;
+    }
+    disable(opts) {
+        this.control.disable(opts);
+        return this;
+    }
+    enable(opts) {
+        this.control.enable(opts);
+        return this;
+    }
+    get disabled() {
+        return this.control.disabled;
+    }
+    get enabled() {
+        return this.control.enabled;
+    }
+    get valueChanges() {
+        return this.changed$.asObservable();
+    }
+    get fieldChanges() {
+        return this.fieldChanged$.asObservable();
     }
 }
+
+/** Bundesland-IDs des Backends; `DE` steht fuer bundeslandunabhaengige Daten. */
+var BUNDESLAND_IDS;
+(function (BUNDESLAND_IDS) {
+    BUNDESLAND_IDS[BUNDESLAND_IDS["BADEN_WUERTEMBERG"] = 1] = "BADEN_WUERTEMBERG";
+    BUNDESLAND_IDS[BUNDESLAND_IDS["BAYERN"] = 2] = "BAYERN";
+    BUNDESLAND_IDS[BUNDESLAND_IDS["BERLIN"] = 3] = "BERLIN";
+    BUNDESLAND_IDS[BUNDESLAND_IDS["BRANDENBURG"] = 4] = "BRANDENBURG";
+    BUNDESLAND_IDS[BUNDESLAND_IDS["BREMEN"] = 5] = "BREMEN";
+    BUNDESLAND_IDS[BUNDESLAND_IDS["HAMBURG"] = 6] = "HAMBURG";
+    BUNDESLAND_IDS[BUNDESLAND_IDS["HESSEN"] = 7] = "HESSEN";
+    BUNDESLAND_IDS[BUNDESLAND_IDS["MECKLENBURG_VORPOMMERN"] = 8] = "MECKLENBURG_VORPOMMERN";
+    BUNDESLAND_IDS[BUNDESLAND_IDS["NIEDERSACHSEN"] = 9] = "NIEDERSACHSEN";
+    BUNDESLAND_IDS[BUNDESLAND_IDS["NORDRHEIN_WESTFALEN"] = 10] = "NORDRHEIN_WESTFALEN";
+    BUNDESLAND_IDS[BUNDESLAND_IDS["RHEINLAND_PFALZ"] = 11] = "RHEINLAND_PFALZ";
+    BUNDESLAND_IDS[BUNDESLAND_IDS["SAARLAND"] = 12] = "SAARLAND";
+    BUNDESLAND_IDS[BUNDESLAND_IDS["SACHSEN"] = 13] = "SACHSEN";
+    BUNDESLAND_IDS[BUNDESLAND_IDS["SACHSEN_ANHALT"] = 14] = "SACHSEN_ANHALT";
+    BUNDESLAND_IDS[BUNDESLAND_IDS["SCHLESWIG_HOLSTEIN"] = 15] = "SCHLESWIG_HOLSTEIN";
+    BUNDESLAND_IDS[BUNDESLAND_IDS["THUERINGEN"] = 16] = "THUERINGEN";
+    BUNDESLAND_IDS[BUNDESLAND_IDS["DE"] = 17] = "DE";
+})(BUNDESLAND_IDS || (BUNDESLAND_IDS = {}));
+
+var HttpStatusCodes;
+(function (HttpStatusCodes) {
+    HttpStatusCodes[HttpStatusCodes["OK"] = 200] = "OK";
+    HttpStatusCodes[HttpStatusCodes["BAD_REQUEST"] = 400] = "BAD_REQUEST";
+    HttpStatusCodes[HttpStatusCodes["PRECONDITION_FAILED"] = 412] = "PRECONDITION_FAILED";
+    HttpStatusCodes[HttpStatusCodes["CONFLICT"] = 409] = "CONFLICT";
+    HttpStatusCodes[HttpStatusCodes["FORBIDDEN"] = 403] = "FORBIDDEN";
+    HttpStatusCodes[HttpStatusCodes["NOT_FOUND"] = 404] = "NOT_FOUND";
+    HttpStatusCodes[HttpStatusCodes["LOCKED"] = 423] = "LOCKED";
+    HttpStatusCodes[HttpStatusCodes["NOT_ACCEPTABLE"] = 406] = "NOT_ACCEPTABLE";
+})(HttpStatusCodes || (HttpStatusCodes = {}));
 
 /** Hier werden alle von der Applikation genutzten REGEX gespeichert. */
 const REGEX = {
@@ -1103,60 +1446,486 @@ const REGEX = {
     DATE: /^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/
 };
 
-class ValidatorEmail {
-    hasError = false;
-    error = 'Bitte geben Sie eine gültige E-Mail ein';
-    value;
-    constructor(error) {
-        if (error) {
-            this.error = error;
+class TypeConverter {
+    static DATE_REGEX = /(\d{2}).(\d{2}).(\d{4})/;
+    static DATE_REGEX_INPUT = /(\d{4})-(\d{2})-(\d{2})/;
+    /** Versucht den Wert in eine Zahl zu konvertieren. */
+    static toNumber(value) {
+        // Falls null oder undefined übergeben wurde, brechen wir ab
+        if (!value) {
+            return value;
         }
-    }
-    validator() {
-        return (input) => {
-            this.value = input.value;
-            return this.validate();
-        };
-    }
-    validate() {
-        if (!this.value) {
-            return null;
+        // Falls der Wert bereits eine Zahl ist, sind wir fertig
+        if (_.isNumber(value)) {
+            return value;
         }
-        if (this.value && REGEX.EMAIL.test(this.value.toString())) {
-            this.hasError = false;
-            return null;
+        // Falls der Wert ein String ist, testen wir, ob er aussieht wie eine Zahl und versuchen ihn anschließend zu konvertieren
+        if (_.isString(value) && REGEX.NUMBER.test(value)) {
+            return TypeConverter.convertInputStringToNumber(value);
+        }
+        // Wir haben keine Regel für die Konvertierung gefunden
+        return value;
+    }
+    /** Nimmt eine Zahl und gibt eine deutsche Representation dieses Wertes zurück */
+    static asGermanFloat(value, stellen) {
+        if (value === null || value === undefined) {
+            return undefined;
+        }
+        if (!_.isUndefined(stellen) && _.isNumber(value)) {
+            value = value.toFixed(stellen);
+        }
+        return value.toString().replace('.', ',');
+    }
+    static toMoment(value) {
+        if (value === null || value === undefined) {
+            return undefined;
+        }
+        if (moment.isMoment(value)) {
+            return value.utc(true);
+        }
+        if (_.isString(value)) {
+            if (TypeConverter.DATE_REGEX.test(value)) {
+                return moment(value, 'DD.MM.YYYY').utc(true);
+            }
+            if (TypeConverter.DATE_REGEX_INPUT.test(value)) {
+                return moment(value, 'YYYY-MM-DDTHH:mm:SS').utc(true);
+            }
+        }
+        return value;
+    }
+    static asGermanDate(value) {
+        if (value === null || value === undefined) {
+            return undefined;
+        }
+        const mDate = TypeConverter.toMoment(value);
+        if (!moment.isMoment(mDate) || !mDate.isValid()) {
+            return value.toString();
+        }
+        return mDate.format('DD.MM.YYYY');
+    }
+    static asGermanTime(value, withSeconds = false, withMilliseconds = false) {
+        if (value === null || value === undefined) {
+            return undefined;
+        }
+        const mDate = TypeConverter.toMoment(value);
+        if (!moment.isMoment(mDate) || !mDate.isValid()) {
+            return value.toString();
+        }
+        return withMilliseconds ? mDate.format('HH:mm:ss.SSS') : withSeconds ? mDate.format('HH:mm:ss') : mDate.format('HH:mm');
+    }
+    /** Erzeugt ein moment object und setzt dieses auf UTC, falls dies noch nicht geschehen ist. */
+    /*public static utcDate(...args: any[]): moment.Moment {
+      const isDefined = _.every(args, (arg: any) => Util.isDefined(arg));
+      if (!isDefined) {
+        return undefined;
+      }
+      const mObject = moment(...args);
+      if (mObject.isUTC()) {
+        return mObject;
+      } else {
+        return mObject.utc(true);
+      }
+    }*/
+    /** Konvertiert ein moment Object in die lokale Zeitzone (Entfernt UTC) */
+    /*public static toLocalDate(mObject: moment.Moment): moment.Moment {
+      if (!Util.isDefined(mObject)) {
+        return undefined;
+      }
+      const param = moment(mObject);
+      if (param.isUTC()) {
+        return param.local(true);
+      } else {
+        return param;
+      }
+    }*/
+    static booleanNumberToSting(n) {
+        return n === 1 ? 'Ja' : 'Nein';
+    }
+    /** Konvertiert ein Moment Object zu einem Date Object */
+    /*public static toJSDate(mObject: moment.Moment): Date {
+      const mDate = TypeConverter.utcDate(mObject);
+      if (!mDate) {
+        return undefined;
+      }
+      return mDate.toDate();
+    }*/
+    /** Kovertiert einen String in einen Regex um eine Volltextsuche zu ermöglichen */
+    static asRegex(text) {
+        let builderString = '';
+        if (_.isEmpty(text)) {
+            return new RegExp(builderString);
+        }
+        _.each(text.split(''), (char) => {
+            builderString = builderString + `${char}`;
+        });
+        return new RegExp(builderString.replace(REGEX.SPECIAL_CHARS_REGEX, '\\$&'), 'i');
+    }
+    static booleanToNumber(bool) {
+        return bool === true ? 1 : 0;
+    }
+    static numberToBoolean(digit) {
+        return digit === 1;
+    }
+    /** Kovertiert einen String, der dem Regex einer Zahl entspricht, in eine Zahl */
+    static convertInputStringToNumber(value) {
+        if (value.includes('.')) {
+            return Number.parseFloat(value);
+        }
+        if (value.includes(',')) {
+            return Number.parseFloat(value.replace(',', '.'));
+        }
+        return Number.parseInt(value);
+    }
+}
+
+/** Zeigt eine Zahl mit Dezimalkomma an, optional mit festen Nachkommastellen und Tausenderpunkt. */
+class GermanFloatDirective {
+    el;
+    appGermanFloat;
+    digits;
+    tausendertrennzeichen = false;
+    constructor(el) {
+        this.el = el;
+    }
+    ngOnChanges() {
+        this.el.nativeElement.innerHTML = Util.isDefined(this.appGermanFloat)
+            ? this.convert(this.appGermanFloat, this.tausendertrennzeichen, this.digits)
+            : '';
+    }
+    parse(float) {
+        return this.convert(float, this.tausendertrennzeichen) ?? '';
+    }
+    transform(float) {
+        return this.convert(float, this.tausendertrennzeichen) ?? '';
+    }
+    convert(float, tausendertrennzeichen, digits) {
+        if (!tausendertrennzeichen) {
+            return Util.isDefined(digits) ? TypeConverter.asGermanFloat(float, digits) : TypeConverter.asGermanFloat(float);
+        }
+        if (!Util.isDefined(digits)) {
+            return Number(float).toLocaleString('de-DE');
+        }
+        return Number(Number(float).toFixed(digits)).toLocaleString('de-DE', {
+            minimumFractionDigits: digits,
+            maximumFractionDigits: digits
+        });
+    }
+    /** @nocollapse */ static ɵfac = function GermanFloatDirective_Factory(t) { return new (t || GermanFloatDirective)(i0.ɵɵdirectiveInject(i0.ElementRef)); };
+    /** @nocollapse */ static ɵdir = /** @pureOrBreakMyCode */ i0.ɵɵdefineDirective({ type: GermanFloatDirective, selectors: [["", "appGermanFloat", ""]], inputs: { appGermanFloat: "appGermanFloat", digits: "digits", tausendertrennzeichen: "tausendertrennzeichen" }, features: [i0.ɵɵNgOnChangesFeature] });
+}
+(function () { (typeof ngDevMode === "undefined" || ngDevMode) && i0.ɵsetClassMetadata(GermanFloatDirective, [{
+        type: Directive,
+        args: [{
+                selector: '[appGermanFloat]'
+            }]
+    }], function () { return [{ type: i0.ElementRef }]; }, { appGermanFloat: [{
+            type: Input
+        }], digits: [{
+            type: Input
+        }], tausendertrennzeichen: [{
+            type: Input
+        }] }); })();
+class GermanFloatModule {
+    /** @nocollapse */ static ɵfac = function GermanFloatModule_Factory(t) { return new (t || GermanFloatModule)(); };
+    /** @nocollapse */ static ɵmod = /** @pureOrBreakMyCode */ i0.ɵɵdefineNgModule({ type: GermanFloatModule });
+    /** @nocollapse */ static ɵinj = /** @pureOrBreakMyCode */ i0.ɵɵdefineInjector({});
+}
+(function () { (typeof ngDevMode === "undefined" || ngDevMode) && i0.ɵsetClassMetadata(GermanFloatModule, [{
+        type: NgModule,
+        args: [{
+                declarations: [GermanFloatDirective],
+                exports: [GermanFloatDirective]
+            }]
+    }], null, null); })();
+(function () { (typeof ngJitMode === "undefined" || ngJitMode) && i0.ɵɵsetNgModuleScope(GermanFloatModule, { declarations: [GermanFloatDirective], exports: [GermanFloatDirective] }); })();
+
+const ROLE_GUARD = new InjectionToken('ROLE_GUARD');
+
+/**
+ * Markiert Elemente fuer die rollenabhaengige Frontend-Konfiguration. Das eigentliche Ausblenden erledigt die
+ * an `ROLE_GUARD` gebundene Rollenpruefung anhand der `configname`-Attribute; die Direktive verhindert nur das
+ * Aufblitzen vor der Pruefung und sperrt schreibgeschuetzte Formulare.
+ */
+class RoleGuardDirective extends BaseObject {
+    el;
+    roleGuard;
+    /** Name des Elements in der Frontend-Konfiguration */
+    configname;
+    /** Formular, das bei Leserecht gesperrt wird (nur mit `configname="readonly-form"`) */
+    readonlyFormControl;
+    constructor(el, roleGuard) {
+        super();
+        this.el = el;
+        this.roleGuard = roleGuard;
+    }
+    ngOnInit() {
+        // Die Rollenpruefung kann vor oder nach dieser Direktive initialisiert werden.
+        this.checkElement();
+        this.watch(this.roleGuard.isActive.changed.asObservable(), new SubscriptionHandler(this.checkElement.bind(this)));
+    }
+    checkElement() {
+        if (!this.roleGuard.isActive.value) {
+            this.checkWithoutRoleGuard();
+        }
+        else if (this.configname.includes('watch_element')) {
+            this.watchChildren();
+        }
+        else if (this.configname === 'readonly-form' && Util.isDefined(this.readonlyFormControl)) {
+            this.lockFormIfReadonly();
         }
         else {
-            this.hasError = true;
-            return { invalidEmail: true };
+            this.hideUntilChecked(this.roleGuard.elementsChecked);
+        }
+    }
+    /** Listen laden ihre Eintraege nachtraeglich - neue Unterelemente muessen erneut geprueft werden. */
+    watchChildren() {
+        const observer = new MutationObserver(() => {
+            this.roleGuard.elementsChecked.value = false;
+            this.roleGuard.trigger();
+        });
+        observer.observe(this.el.nativeElement, {
+            attributes: false,
+            childList: true,
+            subtree: this.configname.includes('::deep')
+        });
+    }
+    lockFormIfReadonly() {
+        if (!this.roleGuard.isCurrentPageReadonly) {
+            return;
+        }
+        this.readonlyFormControl.disable();
+        // Das Formular aktiviert sich bei Wertwechseln teils selbst wieder, daher erneut sperren.
+        this.watch(this.readonlyFormControl.valueChanges, new SubscriptionHandler(() => {
+            setTimeout(() => this.readonlyFormControl.disable(), 100);
+        }));
+        this.watch(this.readonlyFormControl.control.statusChanges, new SubscriptionHandler(() => {
+            setTimeout(() => this.readonlyFormControl.disable(), 100);
+        }));
+    }
+    /** Ohne Rollenpruefung entfallen Ersatz-Elemente und Readonly-Titel; der Rest wartet auf die Menuepruefung. */
+    checkWithoutRoleGuard() {
+        if (this.configname.includes('replace_element') || this.configname.includes('readonly-title')) {
+            this.el.nativeElement.remove();
+        }
+        this.hideUntilChecked(this.roleGuard.menuChecked);
+    }
+    hideUntilChecked(checked) {
+        const element = this.el.nativeElement;
+        if (!checked.value) {
+            element.style.visibility = 'hidden';
+        }
+        this.watch(checked.changed, new SubscriptionHandler((isChecked) => {
+            if (isChecked) {
+                element.style.visibility = 'initial';
+            }
+        }));
+    }
+    /** @nocollapse */ static ɵfac = function RoleGuardDirective_Factory(t) { return new (t || RoleGuardDirective)(i0.ɵɵdirectiveInject(i0.ElementRef), i0.ɵɵdirectiveInject(ROLE_GUARD)); };
+    /** @nocollapse */ static ɵdir = /** @pureOrBreakMyCode */ i0.ɵɵdefineDirective({ type: RoleGuardDirective, selectors: [["", "configname", ""]], inputs: { configname: "configname", readonlyFormControl: "readonlyFormControl" }, features: [i0.ɵɵInheritDefinitionFeature] });
+}
+(function () { (typeof ngDevMode === "undefined" || ngDevMode) && i0.ɵsetClassMetadata(RoleGuardDirective, [{
+        type: Directive,
+        args: [{
+                selector: '[configname]'
+            }]
+    }], function () { return [{ type: i0.ElementRef }, { type: undefined, decorators: [{
+                type: Inject,
+                args: [ROLE_GUARD]
+            }] }]; }, { configname: [{
+            type: Input
+        }], readonlyFormControl: [{
+            type: Input
+        }] }); })();
+class RoleGuardModule {
+    /** @nocollapse */ static ɵfac = function RoleGuardModule_Factory(t) { return new (t || RoleGuardModule)(); };
+    /** @nocollapse */ static ɵmod = /** @pureOrBreakMyCode */ i0.ɵɵdefineNgModule({ type: RoleGuardModule });
+    /** @nocollapse */ static ɵinj = /** @pureOrBreakMyCode */ i0.ɵɵdefineInjector({});
+}
+(function () { (typeof ngDevMode === "undefined" || ngDevMode) && i0.ɵsetClassMetadata(RoleGuardModule, [{
+        type: NgModule,
+        args: [{
+                declarations: [RoleGuardDirective],
+                exports: [RoleGuardDirective]
+            }]
+    }], null, null); })();
+(function () { (typeof ngJitMode === "undefined" || ngJitMode) && i0.ɵɵsetNgModuleScope(RoleGuardModule, { declarations: [RoleGuardDirective], exports: [RoleGuardDirective] }); })();
+
+class DeactivationHandler {
+    deactivators$ = {};
+    register(name, component) {
+        this.deactivators$[name] = component;
+    }
+    remove(name) {
+        delete this.deactivators$[name];
+    }
+    canDeactivate() {
+        return new Observable(subscriber => {
+            this._deactivateComponent(0, subscriber);
+        });
+    }
+    _deactivateComponent(index, observer) {
+        const component = Object.values(this.deactivators$)[index];
+        if (!component) {
+            observer.next(true);
+            observer.complete();
+        }
+        else {
+            SubscriptionManager.subscribe(component.canDeactivate(), new SubscriptionHandler((canDeactivate) => {
+                if (!canDeactivate) {
+                    observer.next(false);
+                    observer.complete();
+                }
+                else {
+                    this._deactivateComponent(index + 1, observer);
+                }
+            }));
         }
     }
 }
 
-class ValidatorFixedValue {
-    comparator;
-    error;
-    hasError;
+class ItemStore {
+    identifier;
+    transform;
+    onChanged = new Subject();
+    items$ = {};
+    transformedItems$ = [];
+    constructor(identifier, transform) {
+        this.identifier = identifier;
+        this.transform = transform;
+    }
+    updateItems(items) {
+        this.clear();
+        items = items || [];
+        for (const item of items) {
+            this.items$[this.keyOf(item)] = item;
+        }
+        this.internalTransform$();
+    }
+    clear() {
+        this.items$ = {};
+        this.transformedItems$ = [];
+    }
+    remove(item) {
+        if (item) {
+            delete this.items$[this.keyOf(item)];
+            this.internalTransform$();
+        }
+    }
+    removeByIdentifier(identifier) {
+        if (Util.isDefined(identifier)) {
+            delete this.items$[identifier];
+            this.internalTransform$();
+        }
+    }
+    update(item) {
+        if (item) {
+            this.items$[this.keyOf(item)] = item;
+            this.internalTransform$();
+        }
+    }
+    push(item) {
+        if (item) {
+            this.items$[this.keyOf(item)] = item;
+            this.internalTransform$();
+        }
+    }
+    internalTransform$() {
+        this.transformedItems$ = Object.values(this.items$);
+        if (this.transform) {
+            this.transformedItems$ = this.transform(this.transformedItems$);
+        }
+        this.onChanged.next(this.transformedItems$);
+    }
+    /** `identifier` ist bewusst `string` statt `keyof T`, sonst passt `ItemStore<TModel>` nicht zu `ItemStore<Basismodel>`. */
+    identifierOf(item) {
+        return item[this.identifier];
+    }
+    keyOf(item) {
+        return String(this.identifierOf(item));
+    }
+    get items() {
+        return this.transformedItems$;
+    }
+}
+
+/**
+ * Diese Klasse kann verwendet werden um Werte zu speichern und die automatisch
+ * überwachbar zu machen. Dadurch können UI Push Strategien leichter implementiert werden.
+ */
+class ObservableValue {
+    equals;
     value$;
-    constructor(comparator, error = null) {
-        this.comparator = comparator;
-        this.error = error;
+    changed = new Subject();
+    constructor(initialValue, equals) {
+        this.equals = equals;
+        this.value$ = initialValue;
+        this.equals = Util.isDefined(this.equals) ? this.equals : this.defaultComparator;
     }
-    validate() {
-        this.hasError = false;
-        if (this.comparator === this.value$) {
-            return null;
-        }
-        else {
-            this.hasError = true;
-            return { validatorFixed: true };
+    set value(value) {
+        if (!this.equals(this.value$, value)) {
+            this.value$ = value;
+            this.changed.next(value);
         }
     }
-    validator() {
-        return (input) => {
-            this.value$ = input.value;
-            return this.validate();
-        };
+    get value() {
+        return this.value$;
+    }
+    defaultComparator(current, next) {
+        return current === next;
+    }
+}
+
+class TimestampItemStore extends ItemStore {
+    itemLifetimeInSeconds;
+    static ITEM_TIMESTAMP_KEY = '__timestamp__';
+    wasFilled;
+    constructor(identifier, itemLifetimeInSeconds, transform) {
+        super(identifier, transform);
+        this.itemLifetimeInSeconds = itemLifetimeInSeconds;
+        this.wasFilled = false;
+    }
+    updateItems(items) {
+        super.updateItems(items);
+        _.each(this.items, (item) => this.trackItem(item));
+        this.wasFilled = true;
+    }
+    clear() {
+        super.clear();
+        this.wasFilled = false;
+    }
+    update(item) {
+        super.update(item);
+        this.trackItem(item);
+    }
+    push(item) {
+        super.push(item);
+        this.trackItem(item);
+    }
+    isItemValid(identifier) {
+        let itemInStore = null;
+        for (const item of this.items) {
+            if (this.identifierOf(item) === identifier) {
+                itemInStore = item;
+                break;
+            }
+        }
+        if (!Util.isDefined(itemInStore)) {
+            return false;
+        }
+        const currentTimeStamp = Util.getCurrentUnixTimestamp();
+        return (currentTimeStamp - this.itemLifetimeInSeconds) < itemInStore[TimestampItemStore.ITEM_TIMESTAMP_KEY];
+    }
+    isStoreValid() {
+        if (!this.wasFilled) {
+            return false;
+        }
+        if (_.isEmpty(this.items)) {
+            return false;
+        }
+        return _.all(this.items, (item) => this.isItemValid(this.identifierOf(item)));
+    }
+    trackItem(item) {
+        item[TimestampItemStore.ITEM_TIMESTAMP_KEY] = Util.getCurrentUnixTimestamp();
     }
 }
 
@@ -1233,392 +2002,6 @@ class ValidatorFloat {
     }
 }
 
-class ValidatorIntegerRange {
-    minValue$;
-    maxValue$;
-    showSmallError;
-    error = 'Bitte geben Sie eine ganze Zahl ein';
-    smallError = `${Util.isDefined(this.minValue$) ? 'min: ' + this.minValue$ + (Util.isDefined(this.maxValue$) ? ', ' : '') : ''}${Util.isDefined(this.maxValue$) ? 'max: ' + this.maxValue$ : ''}`;
-    hasError;
-    value$;
-    constructor(minValue$ = undefined, maxValue$ = undefined, showSmallError = false) {
-        this.minValue$ = minValue$;
-        this.maxValue$ = maxValue$;
-        this.showSmallError = showSmallError;
-    }
-    validate() {
-        this.hasError = false;
-        if (!Util.isDefined(this.value$)) {
-            return null;
-        }
-        let checkVal;
-        if (_.isString(this.value$)) {
-            checkVal = Number.parseFloat(this.value$);
-        }
-        else {
-            checkVal = Number(this.value$);
-        }
-        if (checkVal < this.minValue$ || checkVal > this.maxValue$) {
-            if (this.showSmallError) {
-                this.error = this.smallError;
-            }
-            else {
-                this.error = `Bitte wählen Sie eine Zahl zwischen ${this.minValue$} und ${this.maxValue$}`;
-            }
-            this.hasError = true;
-            return { invalidIntegerRange: true };
-        }
-        return null;
-    }
-    validator() {
-        return (input) => {
-            this.value$ = input.value;
-            return this.validate();
-        };
-    }
-}
-
-class ValidatorInteger {
-    allowNegativeValues$;
-    error = 'Bitte geben Sie eine ganze Zahl ein';
-    hasError;
-    value$;
-    regex$;
-    constructor(allowNegativeValues$ = false) {
-        this.allowNegativeValues$ = allowNegativeValues$;
-        if (allowNegativeValues$) {
-            this.regex$ = REGEX.SIGNED_INTEGER;
-        }
-        else {
-            this.regex$ = REGEX.INTEGER;
-        }
-    }
-    validate() {
-        this.hasError = false;
-        if (!this.value$) {
-            return null;
-        }
-        if (!this.regex$.test(this.value$)) {
-            this.hasError = true;
-            return { invalidInteger: true };
-        }
-        return null;
-    }
-    validator() {
-        return (input) => {
-            this.value$ = input.value;
-            return this.validate();
-        };
-    }
-}
-
-class ValidatorLength {
-    maxLength;
-    minLength;
-    static ERROR_MAXLENGTH = 'Dieses Feld darf maximal __MAX_LENGTH__ Zeichen enthalten.';
-    static ERROR_MINLENGTH = 'Dieses Feld muss minimal __MIN_LENGTH__ Zeichen enthalten.';
-    error;
-    hasError;
-    value;
-    constructor(maxLength, minLength) {
-        this.maxLength = maxLength;
-        this.minLength = minLength;
-    }
-    validator() {
-        return (input) => {
-            this.value = input.value;
-            return this.validate();
-        };
-    }
-    validate() {
-        this.hasError = false;
-        if (this.value === null || this.value === undefined || (_.isString(this.value) && _.isEmpty(this.value))) {
-            return null;
-        }
-        if (Util.isDefined(this.maxLength)) {
-            if (this.value.toString().length > this.maxLength) {
-                this.hasError = true;
-                this.error = ValidatorLength.ERROR_MAXLENGTH.replace('__MAX_LENGTH__', this.maxLength.toString());
-                return { invalidMaxLength: true };
-            }
-        }
-        if (Util.isDefined(this.minLength)) {
-            if (this.value.toString().length < this.minLength) {
-                this.hasError = true;
-                this.error = ValidatorLength.ERROR_MINLENGTH.replace('__MIN_LENGTH__', this.minLength.toString());
-                return { invalidMinLength: true };
-            }
-        }
-        return null;
-    }
-}
-
-class ValidatorMinValue {
-    minValue$;
-    error;
-    hasError;
-    value;
-    constructor(minValue$) {
-        this.minValue$ = minValue$;
-    }
-    validate() {
-        this.hasError = false;
-        if (this.value < this.minValue$) {
-            this.error = `Bitte wählen Sie einen Wert nach dem Startwert (${this.minValue$}).`;
-            this.hasError = true;
-            return { invalidValue: true };
-        }
-        else {
-            return null;
-        }
-    }
-    validator() {
-        return (input) => {
-            this.value = input.value;
-            return this.validate();
-        };
-    }
-}
-
-class ValidatorPostalCode {
-    hasError = false;
-    error = 'Bitte geben Sie eine gültige Postleitzahl ein';
-    value;
-    constructor(error) {
-        if (error) {
-            this.error = error;
-        }
-    }
-    validator() {
-        return (input) => {
-            this.value = input.value;
-            return this.validate();
-        };
-    }
-    validate() {
-        this.hasError = false;
-        if (!this.value) {
-            return null;
-        }
-        if (this.value && REGEX.POSTAL_CODE.test(this.value.toString())) {
-            this.hasError = false;
-            return null;
-        }
-        else {
-            this.hasError = true;
-            return { invalidPostalCode: true };
-        }
-    }
-}
-
-var Bundesland;
-(function (Bundesland) {
-    Bundesland[Bundesland["Baden_Wuertemberg"] = 1] = "Baden_Wuertemberg";
-    Bundesland[Bundesland["Bayern"] = 2] = "Bayern";
-    Bundesland[Bundesland["Berlin"] = 3] = "Berlin";
-    Bundesland[Bundesland["Brandenburg"] = 4] = "Brandenburg";
-    Bundesland[Bundesland["Bremen"] = 5] = "Bremen";
-    Bundesland[Bundesland["Hamburg"] = 6] = "Hamburg";
-    Bundesland[Bundesland["Hessen"] = 7] = "Hessen";
-    Bundesland[Bundesland["Mecklenburg_Vorpommern"] = 8] = "Mecklenburg_Vorpommern";
-    Bundesland[Bundesland["Niedersachsen"] = 9] = "Niedersachsen";
-    Bundesland[Bundesland["Nordrhein_Westfalen"] = 10] = "Nordrhein_Westfalen";
-    Bundesland[Bundesland["Rheinland_Pfalz"] = 11] = "Rheinland_Pfalz";
-    Bundesland[Bundesland["Saarland"] = 12] = "Saarland";
-    Bundesland[Bundesland["Sachsen"] = 13] = "Sachsen";
-    Bundesland[Bundesland["Sachsen_Anhalt"] = 14] = "Sachsen_Anhalt";
-    Bundesland[Bundesland["Schleswig_Holstein"] = 15] = "Schleswig_Holstein";
-    Bundesland[Bundesland["Thueringen"] = 16] = "Thueringen";
-})(Bundesland || (Bundesland = {}));
-
-class ValidatorBetriebsnummer {
-    hasError = false;
-    _error = null;
-    value;
-    static REGEX_BY = /^(276)?09[0-9]{10}$/;
-    static REGEX_NI = /^(276)?03[0-9]{10}$/;
-    static REGEX_SH = /^(276)?01[0-9]{10}$/;
-    blRegex = ValidatorBetriebsnummer.REGEX_BY;
-    blNummer = '09';
-    constructor(idBundesland = Bundesland.Bayern, error) {
-        switch (idBundesland) {
-            case Bundesland.Bayern:
-                this.blRegex = ValidatorBetriebsnummer.REGEX_BY;
-                this.blNummer = '09';
-                break;
-            case Bundesland.Niedersachsen:
-                this.blRegex = ValidatorBetriebsnummer.REGEX_NI;
-                this.blNummer = '03';
-                break;
-            case Bundesland.Schleswig_Holstein:
-                this.blRegex = ValidatorBetriebsnummer.REGEX_SH;
-                this.blNummer = '01';
-                break;
-            default:
-                this.blRegex = ValidatorBetriebsnummer.REGEX_BY;
-                this.blNummer = '09';
-                break;
-        }
-        if (error) {
-            this._error = error;
-        }
-    }
-    get error() {
-        return this._error ?? `Die Betriebsnummer muss mit ${this.blNummer} beginnen, gefolgt von 10 Ziffern. Optional kann die Landesnummer 276 (Deutschland) vorangestellt werden.`;
-    }
-    validator() {
-        return (input) => {
-            this.value = input.value;
-            return this.validate();
-        };
-    }
-    validate() {
-        this.hasError = false;
-        if (!this.value) {
-            return null;
-        }
-        if (this.blRegex.test(this.value.toString())) {
-            return null;
-        }
-        else {
-            this.hasError = true;
-            return { invalidBetriebsnr: true };
-        }
-    }
-}
-
-class TypeConverter {
-    static DATE_REGEX = /(\d{2}).(\d{2}).(\d{4})/;
-    static DATE_REGEX_INPUT = /(\d{4})-(\d{2})-(\d{2})/;
-    /** Versucht den Wert in eine Zahl zu konvertieren. */
-    static toNumber(value) {
-        // Falls null oder undefined übergeben wurde, brechen wir ab
-        if (!value) {
-            return value;
-        }
-        // Falls der Wert bereits eine Zahl ist, sind wir fertig
-        if (_.isNumber(value)) {
-            return value;
-        }
-        // Falls der Wert ein String ist, testen wir, ob er aussieht wie eine Zahl und versuchen ihn anschließend zu konvertieren
-        if (_.isString(value) && REGEX.NUMBER.test(value)) {
-            return TypeConverter.convertInputStringToNumber(value);
-        }
-        // Wir haben keine Regel für die Konvertierung gefunden
-        return value;
-    }
-    /** Nimmt eine Zahl und gibt eine deutsche Representation dieses Wertes zurück */
-    static asGermanFloat(value, stellen) {
-        if (value === null || value === undefined) {
-            return undefined;
-        }
-        if (!_.isUndefined(stellen) && _.isNumber(value)) {
-            value = value.toFixed(stellen);
-        }
-        return value.toString().replace('.', ',');
-    }
-    static toMoment(value) {
-        if (value === null || value === undefined) {
-            return undefined;
-        }
-        if (moment__default.isMoment(value)) {
-            return value.utc(true);
-        }
-        if (_.isString(value)) {
-            if (TypeConverter.DATE_REGEX.test(value)) {
-                return moment__default(value, 'DD.MM.YYYY').utc(true);
-            }
-            if (TypeConverter.DATE_REGEX_INPUT.test(value)) {
-                return moment__default(value, 'YYYY-MM-DDTHH:mm:SS').utc(true);
-            }
-        }
-        return value;
-    }
-    static asGermanDate(value) {
-        if (value === null || value === undefined) {
-            return undefined;
-        }
-        const mDate = TypeConverter.toMoment(value);
-        if (!moment__default.isMoment(mDate) || !mDate.isValid()) {
-            return value.toString();
-        }
-        return mDate.format('DD.MM.YYYY');
-    }
-    static asGermanTime(value, withSeconds = false, withMilliseconds = false) {
-        if (value === null || value === undefined) {
-            return undefined;
-        }
-        const mDate = TypeConverter.toMoment(value);
-        if (!moment__default.isMoment(mDate) || !mDate.isValid()) {
-            return value.toString();
-        }
-        return withMilliseconds ? mDate.format('HH:mm:ss.SSS') : withSeconds ? mDate.format('HH:mm:ss') : mDate.format('HH:mm');
-    }
-    /** Erzeugt ein moment object und setzt dieses auf UTC, falls dies noch nicht geschehen ist. */
-    /*public static utcDate(...args: any[]): moment.Moment {
-      const isDefined = _.every(args, (arg: any) => Util.isDefined(arg));
-      if (!isDefined) {
-        return undefined;
-      }
-      const mObject = moment(...args);
-      if (mObject.isUTC()) {
-        return mObject;
-      } else {
-        return mObject.utc(true);
-      }
-    }*/
-    /** Konvertiert ein moment Object in die lokale Zeitzone (Entfernt UTC) */
-    /*public static toLocalDate(mObject: moment.Moment): moment.Moment {
-      if (!Util.isDefined(mObject)) {
-        return undefined;
-      }
-      const param = moment(mObject);
-      if (param.isUTC()) {
-        return param.local(true);
-      } else {
-        return param;
-      }
-    }*/
-    static booleanNumberToSting(n) {
-        return n === 1 ? 'Ja' : 'Nein';
-    }
-    /** Konvertiert ein Moment Object zu einem Date Object */
-    /*public static toJSDate(mObject: moment.Moment): Date {
-      const mDate = TypeConverter.utcDate(mObject);
-      if (!mDate) {
-        return undefined;
-      }
-      return mDate.toDate();
-    }*/
-    /** Kovertiert einen String in einen Regex um eine Volltextsuche zu ermöglichen */
-    static asRegex(text) {
-        let builderString = '';
-        if (_.isEmpty(text)) {
-            return new RegExp(builderString);
-        }
-        _.each(text.split(''), (char) => {
-            builderString = builderString + `${char}`;
-        });
-        return new RegExp(builderString.replace(REGEX.SPECIAL_CHARS_REGEX, '\\$&'), 'i');
-    }
-    static booleanToNumber(bool) {
-        return bool === true ? 1 : 0;
-    }
-    static numberToBoolean(digit) {
-        return digit === 1;
-    }
-    /** Kovertiert einen String, der dem Regex einer Zahl entspricht, in eine Zahl */
-    static convertInputStringToNumber(value) {
-        if (value.includes('.')) {
-            return Number.parseFloat(value);
-        }
-        if (value.includes(',')) {
-            return Number.parseFloat(value.replace(',', '.'));
-        }
-        return Number.parseInt(value);
-    }
-}
-
 class AccessableControlFactory {
     static simpleControl(formState = null, validators) {
         const control = new AccessableFormControl();
@@ -1654,7 +2037,7 @@ class AccessableControlFactory {
     static numberDigitsExtendedControl(formState = null, validators, digits = 3, minDigits, maxDigits = 100) {
         let validatorFloat = _.find(validators, (v) => v instanceof ValidatorFloat);
         if (!Util.isDefined(validatorFloat)) {
-            validatorFloat = new ValidatorFloat(null, digits ?? maxDigits);
+            validatorFloat = new ValidatorFloat(undefined, digits ?? maxDigits);
             validators.push(validatorFloat);
         }
         const control = AccessableControlFactory.simpleControl(null, validators);
@@ -1761,510 +2144,398 @@ class AccessableControlFactory {
     }
 }
 
-var HttpStatusCodes;
-(function (HttpStatusCodes) {
-    HttpStatusCodes[HttpStatusCodes["OK"] = 200] = "OK";
-    HttpStatusCodes[HttpStatusCodes["BAD_REQUEST"] = 400] = "BAD_REQUEST";
-    HttpStatusCodes[HttpStatusCodes["PRECONDITION_FAILED"] = 412] = "PRECONDITION_FAILED";
-    HttpStatusCodes[HttpStatusCodes["CONFLICT"] = 409] = "CONFLICT";
-    HttpStatusCodes[HttpStatusCodes["FORBIDDEN"] = 403] = "FORBIDDEN";
-    HttpStatusCodes[HttpStatusCodes["NOT_FOUND"] = 404] = "NOT_FOUND";
-    HttpStatusCodes[HttpStatusCodes["LOCKED"] = 423] = "LOCKED";
-    HttpStatusCodes[HttpStatusCodes["NOT_ACCEPTABLE"] = 406] = "NOT_ACCEPTABLE";
-})(HttpStatusCodes || (HttpStatusCodes = {}));
-
-class BasePushStrategyObject extends BaseObject {
-    markForCheckIf(subject) {
-        return this.watch(subject, new SubscriptionHandler(this.cdr.markForCheck.bind(this.cdr)));
-    }
-    /** @nocollapse */ static ɵfac = /** @pureOrBreakMyCode */ function () { let ɵBasePushStrategyObject_BaseFactory; return function BasePushStrategyObject_Factory(t) { return (ɵBasePushStrategyObject_BaseFactory || (ɵBasePushStrategyObject_BaseFactory = i0.ɵɵgetInheritedFactory(BasePushStrategyObject)))(t || BasePushStrategyObject); }; }();
-    /** @nocollapse */ static ɵdir = /** @pureOrBreakMyCode */ i0.ɵɵdefineDirective({ type: BasePushStrategyObject, features: [i0.ɵɵInheritDefinitionFeature] });
-}
-(function () { (typeof ngDevMode === "undefined" || ngDevMode) && i0.ɵsetClassMetadata(BasePushStrategyObject, [{
-        type: Directive
-    }], null, null); })();
-
-/**
- * Diese Klasse kann verwendet werden um Werte zu speichern und die automatisch
- * überwachbar zu machen. Dadurch können UI Push Strategien leichter implementiert werden.
- */
-class ObservableValue {
-    equals;
-    value$;
-    changed = new Subject();
-    constructor(initialValue, equals) {
-        this.equals = equals;
-        this.value$ = initialValue;
-        this.equals = Util.isDefined(this.equals) ? this.equals : this.defaultComparator;
-    }
-    set value(value) {
-        if (!this.equals(this.value$, value)) {
-            this.value$ = value;
-            this.changed.next(value);
+class ValidatorBetriebsnummer {
+    hasError = false;
+    _error = null;
+    value;
+    static REGEX_BY = /^(276)?09[0-9]{10}$/;
+    static REGEX_NI = /^(276)?03[0-9]{10}$/;
+    static REGEX_SH = /^(276)?01[0-9]{10}$/;
+    blRegex = ValidatorBetriebsnummer.REGEX_BY;
+    blNummer = '09';
+    constructor(idBundesland = BUNDESLAND_IDS.BAYERN, error) {
+        switch (idBundesland) {
+            case BUNDESLAND_IDS.BAYERN:
+                this.blRegex = ValidatorBetriebsnummer.REGEX_BY;
+                this.blNummer = '09';
+                break;
+            case BUNDESLAND_IDS.NIEDERSACHSEN:
+                this.blRegex = ValidatorBetriebsnummer.REGEX_NI;
+                this.blNummer = '03';
+                break;
+            case BUNDESLAND_IDS.SCHLESWIG_HOLSTEIN:
+                this.blRegex = ValidatorBetriebsnummer.REGEX_SH;
+                this.blNummer = '01';
+                break;
+            default:
+                this.blRegex = ValidatorBetriebsnummer.REGEX_BY;
+                this.blNummer = '09';
+                break;
+        }
+        if (error) {
+            this._error = error;
         }
     }
-    get value() {
-        return this.value$;
+    get error() {
+        return this._error ?? `Die Betriebsnummer muss mit ${this.blNummer} beginnen, gefolgt von 10 Ziffern. Optional kann die Landesnummer 276 (Deutschland) vorangestellt werden.`;
     }
-    defaultComparator(current, next) {
-        return current === next;
-    }
-}
-
-class AbstractStoredReadonlyRestservice extends BaseObject {
-    observer;
-    constructor(restServiceObserver) {
-        super();
-        this.observer = Util.isDefined(restServiceObserver) ? restServiceObserver :
-            new ReadonlyRestServiceObserver();
-    }
-    all(searchParams, httpOptions) {
-        return new ReadonlyRestHandler(this.http, this.url, this.observer).all(searchParams, httpOptions)
-            .pipe(tap((response) => {
-            this.store.updateItems(response);
-        }));
-    }
-    show(id, getParams, httpOptions) {
-        return new ReadonlyRestHandler(this.http, this.url, this.observer).show(id, getParams, httpOptions)
-            .pipe(tap((response) => {
-            this.store.update(response);
-        }));
-    }
-}
-
-class AbstractStoredRestservice extends AbstractStoredReadonlyRestservice {
-    constructor() {
-        super(new RestServiceObserver());
-    }
-    create(model, getParams, httpOptions) {
-        let request = new RestHandler(this.http, this.url, this.observer, this.identifier)
-            .create(model, getParams, httpOptions);
-        return this.modifyCreateCall(request);
-    }
-    destroy(id, getParams, httpOptions) {
-        return new RestHandler(this.http, this.url, this.observer, this.identifier)
-            .destroy(id, getParams, httpOptions)
-            .pipe(tap(() => {
-            this.store.removeByIdentifier(id);
-        }));
-    }
-    partialUpdate(model, getParams, httpOptions) {
-        return new RestHandler(this.http, this.url, this.observer, this.identifier)
-            .partialUpdate(model, getParams, httpOptions)
-            .pipe(tap((result) => {
-            this.store.update(result);
-        }));
-    }
-    save(model, getParams, httpOptions) {
-        let request = new RestHandler(this.http, this.url, this.observer, this.identifier)
-            .save(model, getParams, httpOptions);
-        if (Util.isDefined(model[this.identifier])) {
-            request = this.modifyUpdateCall(request);
-        }
-        else {
-            request = this.modifyCreateCall(request);
-        }
-        return request;
-    }
-    set(model, getParams, httpOptions) {
-        let request = new RestHandler(this.http, this.url, this.observer, this.identifier)
-            .set(model, getParams, httpOptions);
-        if (Util.isDefined(model[this.identifier])) {
-            request = this.modifyUpdateCall(request);
-        }
-        else {
-            request = this.modifyCreateCall(request);
-        }
-        return request;
-    }
-    update(model, getParams, httpOptions) {
-        let request = new RestHandler(this.http, this.url, this.observer, this.identifier)
-            .update(model, getParams, httpOptions);
-        request = this.modifyUpdateCall(request);
-        return request;
-    }
-    modifyCreateCall(observable) {
-        return observable.pipe(tap((result) => {
-            this.store.push(result);
-        }));
-    }
-    modifyUpdateCall(observable) {
-        return observable.pipe(tap((result) => {
-            this.store.update(result);
-        }));
-    }
-}
-
-class DeactivationHandler {
-    deactivators$ = {};
-    register(name, component) {
-        this.deactivators$[name] = component;
-    }
-    remove(name) {
-        delete this.deactivators$[name];
-    }
-    canDeactivate() {
-        return new Observable(subscriber => {
-            this._deactivateComponent(0, subscriber);
-        });
-    }
-    _deactivateComponent(index, observer) {
-        const component = Object.values(this.deactivators$)[index];
-        if (!component) {
-            observer.next(true);
-            observer.complete();
-        }
-        else {
-            SubscriptionManager.subscribe(component.canDeactivate(), new SubscriptionHandler((canDeactivate) => {
-                if (!canDeactivate) {
-                    observer.next(false);
-                    observer.complete();
-                }
-                else {
-                    this._deactivateComponent(index + 1, observer);
-                }
-            }));
-        }
-    }
-}
-
-class AbstractActivationQueuedGuard {
-    queue = [];
-    route;
-    state;
-    canActivate(route, state) {
-        this.route = route;
-        this.state = state;
-        return new Observable((subscriber) => {
-            this.runQueueRecursive(0, subscriber);
-        });
-    }
-    sequence(step) {
-        if (_.isArray(step)) {
-            this.queue.push(step);
-        }
-        else {
-            this.queue.push([step]);
-        }
-        return this;
-    }
-    runQueueRecursive(level, subscriber) {
-        const currentQueueItems = this.queue[level];
-        if (!Util.isDefined(currentQueueItems)) {
-            subscriber.next(true);
-            subscriber.complete();
-            return;
-        }
-        const activators = _.map(currentQueueItems, (queueItem) => {
-            return queueItem.canActivate(this.route, this.state);
-        });
-        SubscriptionManager.subscribe(forkJoin(activators), new SubscriptionHandler((canActivateStates) => {
-            if (!_.all(canActivateStates)) {
-                subscriber.next(false);
-                subscriber.complete();
-            }
-            else {
-                this.runQueueRecursive(level + 1, subscriber);
-            }
-        }, () => {
-            subscriber.next(false);
-            subscriber.complete();
-        }));
-    }
-}
-
-class AbstractActivationGuard {
-    route;
-    state;
-    canActivate(route, state) {
-        this.route = route;
-        this.state = state;
-        return this.onActivate()
-            .pipe(switchMap((result) => {
-            return this.onSuccess(result);
-        }), catchError((error) => {
-            return this.onError(error);
-        }));
-    }
-    get routeConfiguration() {
-        return this.route.data.routeConfiguration;
-    }
-}
-
-class AbstractRouteConfiguration {
-    pathSegments;
-    paramNames;
-    parent;
-    constructor(pathSegments, paramNames, parent) {
-        this.pathSegments = pathSegments;
-        this.paramNames = paramNames;
-        this.parent = parent;
-    }
-    get path() {
-        if (Util.isDefined(this.parent)) {
-            return `${this.parent.path}/${this.pathSegments.join('/')}`;
-        }
-        else {
-            return this.pathSegments.join('/');
-        }
-    }
-    get paramDefinition() {
-        return _.extend(Util.isDefined(this.parent) ? this.parent.paramDefinition : {}, this.paramNames || {});
-    }
-    buildNavigation(params) {
-        let navigationParams = Util.isDefined(this.parent) ?
-            this.parent.buildNavigation(params) : [];
-        if (!Util.isDefined(params)) {
-            return navigationParams.concat(this.pathSegments);
-        }
-        navigationParams = navigationParams.concat(_.map(this.pathSegments, (segment) => {
-            const segmentInParams = params[segment.replace(':', '')];
-            if (Util.isDefined(segmentInParams)) {
-                return segmentInParams;
-            }
-            return segment;
-        }));
-        return navigationParams;
+    validator() {
+        return (input) => {
+            this.value = input.value;
+            return this.validate();
+        };
     }
     validate() {
-        for (const pathSnippet in this.pathSegments) {
-            if (!Util.isDefined(pathSnippet)) {
-                console.error('Creating a route without a path snippet is not allowed');
-                return false;
-            }
-            if (pathSnippet.startsWith('/')) {
-                console.error('Creating a route with a path snippet starting with a / is not allowed');
-                return false;
-            }
-            if (pathSnippet.endsWith('/')) {
-                console.error('Creating a route with a path snippet ending with a / is not allowed');
-                return false;
-            }
+        this.hasError = false;
+        if (!this.value) {
+            return null;
         }
-        return true;
-    }
-}
-
-class AbstractResolver {
-    route;
-    state;
-    resolve(route, state) {
-        this.route = route;
-        this.state = state;
-        return this.onResolve();
-    }
-    get routeConfiguration() {
-        return this.route.data.routeConfiguration;
-    }
-}
-
-class BaseRootComponent extends BasePushStrategyObject {
-    observables = [];
-    listenTo(observable, resolver) {
-        this.observables.push(observable);
-        observable.isVisible.value = true;
-        this.watch(observable.nextRequested, new SubscriptionHandler((dataSet) => {
-            this.onNextRequested(observable, dataSet, resolver);
-        }));
-    }
-    /**
-       * Übernimmt die gleichen Aufgaben wie listenTo von BaseRootComponent, aber triggert nicht die Deactivator Überprüfung
-       * @param observable
-       * @param resolver
-       */
-    silentListenTo(observable, resolver) {
-        this.observables.push(observable);
-        observable.isVisible.value = true;
-        this.watch(observable.nextRequested, new SubscriptionHandler((dataSet) => {
-            resolver.resolve(this.activatedRoute, dataSet, observable);
-        }));
-    }
-    ngOnDestroy() {
-        super.ngOnDestroy();
-        _.each(this.observables, (observable) => observable.isVisible.value = false);
-    }
-    onNextRequested(observable, dataSet, resolver) {
-        this.subscribe(this.canDeactivate(), new SubscriptionHandler((canDeactivate) => {
-            if (canDeactivate) {
-                // Maybe catch error
-                resolver.resolve(this.activatedRoute, dataSet, observable);
-            }
-        }));
-    }
-    /** @nocollapse */ static ɵfac = /** @pureOrBreakMyCode */ function () { let ɵBaseRootComponent_BaseFactory; return function BaseRootComponent_Factory(t) { return (ɵBaseRootComponent_BaseFactory || (ɵBaseRootComponent_BaseFactory = i0.ɵɵgetInheritedFactory(BaseRootComponent)))(t || BaseRootComponent); }; }();
-    /** @nocollapse */ static ɵdir = /** @pureOrBreakMyCode */ i0.ɵɵdefineDirective({ type: BaseRootComponent, features: [i0.ɵɵInheritDefinitionFeature] });
-}
-(function () { (typeof ngDevMode === "undefined" || ngDevMode) && i0.ɵsetClassMetadata(BaseRootComponent, [{
-        type: Directive
-    }], null, null); })();
-
-class AbstractReadonlyCachedRestservice extends AbstractStoredReadonlyRestservice {
-    all(searchParams, httpOptions) {
-        if (this.store.isStoreValid()) {
-            return of(this.store.items);
+        if (this.blRegex.test(this.value.toString())) {
+            return null;
         }
         else {
-            return super.all(searchParams, httpOptions);
+            this.hasError = true;
+            return { invalidBetriebsnr: true };
         }
-    }
-    show(id, getParams, httpOptions) {
-        if (this.store.isItemValid(id)) {
-            const lookup = {};
-            lookup[this.identifier] = id;
-            return of(_.find(this.store.items, lookup));
-        }
-        return super.show(id, getParams, httpOptions);
     }
 }
 
-class AbstractCachedRestservice extends AbstractReadonlyCachedRestservice {
-    observer = new RestServiceObserver();
-    create(model, getParams, httpOptions) {
-        let request = new RestHandler(this.http, this.url, this.observer, this.identifier)
-            .create(model, getParams, httpOptions);
-        return this.modifyCreateCall(request);
+class ValidatorCustom {
+    value;
+    constructor() {
     }
-    destroy(id, getParams, httpOptions) {
-        return new RestHandler(this.http, this.url, this.observer, this.identifier)
-            .destroy(id, getParams, httpOptions)
-            .pipe(tap(() => {
-            this.store.removeByIdentifier(id);
-        }));
+    validator() {
+        return () => null;
     }
-    partialUpdate(model, getParams, httpOptions) {
-        return new RestHandler(this.http, this.url, this.observer, this.identifier)
-            .partialUpdate(model, getParams, httpOptions)
-            .pipe(tap((result) => {
-            this.store.update(result);
-        }));
-    }
-    save(model, getParams, httpOptions) {
-        let request = new RestHandler(this.http, this.url, this.observer, this.identifier)
-            .save(model, getParams, httpOptions);
-        if (Util.isDefined(model[this.identifier])) {
-            request = this.modifyUpdateCall(request);
-        }
-        else {
-            request = this.modifyCreateCall(request);
-        }
-        return request;
-    }
-    set(model, getParams, httpOptions) {
-        let request = new RestHandler(this.http, this.url, this.observer, this.identifier)
-            .set(model, getParams, httpOptions);
-        if (Util.isDefined(model[this.identifier])) {
-            request = this.modifyUpdateCall(request);
-        }
-        else {
-            request = this.modifyCreateCall(request);
-        }
-        return request;
-    }
-    update(model, getParams, httpOptions) {
-        let request = new RestHandler(this.http, this.url, this.observer, this.identifier)
-            .update(model, getParams, httpOptions);
-        request = this.modifyUpdateCall(request);
-        return request;
-    }
-    modifyCreateCall(observable) {
-        return observable.pipe(tap((result) => {
-            this.store.push(result);
-        }));
-    }
-    modifyUpdateCall(observable) {
-        return observable.pipe(tap((result) => {
-            this.store.update(result);
-        }));
+    validate() {
+        return null;
     }
 }
 
-class AbstractEntityResolver {
-    router;
-    routeConfiguration;
-    configuration;
-    constructor(router, routeConfiguration, configuration) {
-        this.router = router;
-        this.routeConfiguration = routeConfiguration;
-        this.configuration = configuration;
-        this.configuration = configuration || AbstractEntityResolver.generateDefaultConfiguration();
+class ValidatorDate {
+    static DATE_FORMAT = 'DD.MM.YYYY';
+    error = 'Bitte geben Sie ein gültiges Datum ein';
+    hasError = false;
+    value;
+    constructor() { }
+    validator() {
+        return (input) => {
+            this.value = input.value;
+            return this.validate();
+        };
     }
-    runResolver(activatedRoute, params) {
-        const currentRouteParams = _.extend(_.clone(activatedRoute.snapshot.params), params);
-        if (this.configuration.keepQueryParams) {
-            return this.router.navigate(this.routeConfiguration.buildNavigation(currentRouteParams), { queryParams: activatedRoute.snapshot.queryParams });
+    validate() {
+        this.hasError = false;
+        if (!this.value) {
+            return null;
+        }
+        if (moment.isMoment(this.value)) {
+            if (moment(this.value, ValidatorDate.DATE_FORMAT, true).isValid()) {
+                if (moment(this.value, ValidatorDate.DATE_FORMAT, true).year() >= 1900) {
+                    this.hasError = false;
+                    return null;
+                }
+                else {
+                    return this._fail();
+                }
+            }
+            else {
+                return this._fail();
+            }
+        }
+        return null;
+    }
+    _fail() {
+        this.hasError = true;
+        return { invalidDate: true };
+    }
+}
+
+class ValidatorEmail {
+    hasError = false;
+    error = 'Bitte geben Sie eine gültige E-Mail ein';
+    value;
+    constructor(error) {
+        if (error) {
+            this.error = error;
+        }
+    }
+    validator() {
+        return (input) => {
+            this.value = input.value;
+            return this.validate();
+        };
+    }
+    validate() {
+        if (!this.value) {
+            return null;
+        }
+        if (this.value && REGEX.EMAIL.test(this.value.toString())) {
+            this.hasError = false;
+            return null;
         }
         else {
-            return this.router.navigate(this.routeConfiguration.buildNavigation(currentRouteParams));
+            this.hasError = true;
+            return { invalidEmail: true };
         }
     }
-    static generateDefaultConfiguration() {
-        return {
-            keepQueryParams: false
+}
+
+class ValidatorFixedValue {
+    comparator;
+    error;
+    hasError = false;
+    value$;
+    constructor(comparator, error = undefined) {
+        this.comparator = comparator;
+        this.error = error;
+    }
+    validate() {
+        this.hasError = false;
+        if (this.comparator === this.value$) {
+            return null;
+        }
+        else {
+            this.hasError = true;
+            return { validatorFixed: true };
+        }
+    }
+    validator() {
+        return (input) => {
+            this.value$ = input.value;
+            return this.validate();
         };
     }
 }
 
-class TimestampItemStore extends ItemStore {
-    itemLifetimeInSeconds;
-    static ITEM_TIMESTAMP_KEY = '__timestamp__';
-    wasFilled;
-    constructor(identifier, itemLifetimeInSeconds, transform) {
-        super(identifier, transform);
-        this.itemLifetimeInSeconds = itemLifetimeInSeconds;
-        this.wasFilled = false;
+class ValidatorInteger {
+    allowNegativeValues$;
+    error = 'Bitte geben Sie eine ganze Zahl ein';
+    hasError = false;
+    value$;
+    regex$;
+    constructor(allowNegativeValues$ = false) {
+        this.allowNegativeValues$ = allowNegativeValues$;
+        if (allowNegativeValues$) {
+            this.regex$ = REGEX.SIGNED_INTEGER;
+        }
+        else {
+            this.regex$ = REGEX.INTEGER;
+        }
     }
-    updateItems(items) {
-        super.updateItems(items);
-        _.each(this.items, (item) => this.trackItem(item));
-        this.wasFilled = true;
+    validate() {
+        this.hasError = false;
+        if (!this.value$) {
+            return null;
+        }
+        if (!this.regex$.test(this.value$)) {
+            this.hasError = true;
+            return { invalidInteger: true };
+        }
+        return null;
     }
-    clear() {
-        super.clear();
-        this.wasFilled = false;
+    validator() {
+        return (input) => {
+            this.value$ = input.value;
+            return this.validate();
+        };
     }
-    update(item) {
-        super.update(item);
-        this.trackItem(item);
+}
+
+/** Prueft, ob ein (Dezimal-)Wert innerhalb der Grenzen liegt; beide Grenzen sind optional. */
+class ValidatorIntegerRange {
+    minValue$;
+    maxValue$;
+    showSmallError;
+    error = 'Bitte geben Sie eine ganze Zahl ein';
+    smallError = `${Util.isDefined(this.minValue$) ? 'min: ' +
+        TypeConverter.asGermanFloat(this.minValue$) +
+        (Util.isDefined(this.maxValue$) ? ', ' : '') : ''}${Util.isDefined(this.maxValue$) ? 'max: ' +
+        TypeConverter.asGermanFloat(this.maxValue$) : ''}`;
+    hasError = false;
+    value$;
+    constructor(minValue$ = undefined, maxValue$ = undefined, showSmallError = false) {
+        this.minValue$ = minValue$;
+        this.maxValue$ = maxValue$;
+        this.showSmallError = showSmallError;
     }
-    push(item) {
-        super.push(item);
-        this.trackItem(item);
+    validate() {
+        this.hasError = false;
+        if (!Util.isDefined(this.value$)) {
+            return null;
+        }
+        let checkVal;
+        if (_.isString(this.value$)) {
+            checkVal = Number.parseFloat(this.value$.replace(',', '.'));
+        }
+        else {
+            checkVal = Number(this.value$);
+        }
+        if ((Util.isDefined(this.minValue$) && checkVal < this.minValue$) || (Util.isDefined(this.maxValue$) && checkVal > this.maxValue$)) {
+            if (this.showSmallError) {
+                this.error = this.smallError;
+            }
+            else if (Util.isDefined(this.minValue$) && Util.isDefined(this.maxValue$)) {
+                this.error = `Bitte wählen Sie eine Zahl zwischen ${this.minValue$} und ${this.maxValue$}`;
+            }
+            else if (Util.isDefined(this.minValue$)) {
+                this.error = `Bitte wählen Sie eine Zahl größer gleich ${this.minValue$}`;
+            }
+            else {
+                this.error = `Bitte wählen Sie eine Zahl kleiner gleich ${this.maxValue$}`;
+            }
+            this.hasError = true;
+            return { invalidIntegerRange: true };
+        }
+        return null;
     }
-    isItemValid(identifier) {
-        let itemInStore = null;
-        for (const item of this.items) {
-            if (item[this.identifier] === identifier) {
-                itemInStore = item;
-                break;
+    validator() {
+        return (input) => {
+            this.value$ = input.value;
+            return this.validate();
+        };
+    }
+}
+
+class ValidatorLength {
+    maxLength;
+    minLength;
+    static ERROR_MAXLENGTH = 'Dieses Feld darf maximal __MAX_LENGTH__ Zeichen enthalten.';
+    static ERROR_MINLENGTH = 'Dieses Feld muss minimal __MIN_LENGTH__ Zeichen enthalten.';
+    error = undefined;
+    hasError = false;
+    value;
+    constructor(maxLength, minLength) {
+        this.maxLength = maxLength;
+        this.minLength = minLength;
+    }
+    validator() {
+        return (input) => {
+            this.value = input.value;
+            return this.validate();
+        };
+    }
+    validate() {
+        this.hasError = false;
+        if (this.value === null || this.value === undefined || (_.isString(this.value) && _.isEmpty(this.value))) {
+            return null;
+        }
+        if (Util.isDefined(this.maxLength)) {
+            if (this.value.toString().length > this.maxLength) {
+                this.hasError = true;
+                this.error = ValidatorLength.ERROR_MAXLENGTH.replace('__MAX_LENGTH__', this.maxLength.toString());
+                return { invalidMaxLength: true };
             }
         }
-        if (!Util.isDefined(itemInStore)) {
-            return false;
+        if (Util.isDefined(this.minLength)) {
+            if (this.value.toString().length < this.minLength) {
+                this.hasError = true;
+                this.error = ValidatorLength.ERROR_MINLENGTH.replace('__MIN_LENGTH__', this.minLength.toString());
+                return { invalidMinLength: true };
+            }
         }
-        const currentTimeStamp = Util.getCurrentUnixTimestamp();
-        return (currentTimeStamp - this.itemLifetimeInSeconds) < itemInStore[TimestampItemStore.ITEM_TIMESTAMP_KEY];
+        return null;
     }
-    isStoreValid() {
-        if (!this.wasFilled) {
-            return false;
-        }
-        if (_.isEmpty(this.items)) {
-            return false;
-        }
-        return _.all(this.items, (item) => this.isItemValid(item[this.identifier]));
+}
+
+/** Prueft, ob eine Liste mindestens `minSize` Elemente enthaelt. */
+class ValidatorListLength {
+    minSize;
+    customError;
+    static ERROR_EMPTY = 'Das Feld muss mindestens __MIN_SIZE__ Element(e) enthalten.';
+    error;
+    hasError = false;
+    value;
+    constructor(minSize, customError) {
+        this.minSize = minSize;
+        this.customError = customError;
     }
-    trackItem(item) {
-        item[TimestampItemStore.ITEM_TIMESTAMP_KEY] = Util.getCurrentUnixTimestamp();
+    validator() {
+        return (input) => {
+            this.value = input.value;
+            return this.validate();
+        };
+    }
+    validate() {
+        this.hasError = false;
+        if (this.value === null || this.value === undefined || !_.isArray(this.value)) {
+            return null;
+        }
+        if (this.value.length < this.minSize) {
+            this.hasError = true;
+            this.error = this.customError ?? ValidatorListLength.ERROR_EMPTY.replace('__MIN_SIZE__', this.minSize.toString());
+            return { invalidMinSize: true };
+        }
+        return null;
+    }
+}
+
+class ValidatorMinValue {
+    minValue$;
+    error = undefined;
+    hasError = false;
+    value;
+    constructor(minValue$) {
+        this.minValue$ = minValue$;
+    }
+    validate() {
+        this.hasError = false;
+        if (Util.isDefined(this.value) && this.value < this.minValue$) {
+            this.error = `Bitte wählen Sie einen Wert nach dem Startwert (${this.minValue$}).`;
+            this.hasError = true;
+            return { invalidValue: true };
+        }
+        else {
+            return null;
+        }
+    }
+    validator() {
+        return (input) => {
+            this.value = input.value;
+            return this.validate();
+        };
+    }
+}
+
+class ValidatorPostalCode {
+    hasError = false;
+    error = 'Bitte geben Sie eine gültige Postleitzahl ein';
+    value;
+    constructor(error) {
+        if (error) {
+            this.error = error;
+        }
+    }
+    validator() {
+        return (input) => {
+            this.value = input.value;
+            return this.validate();
+        };
+    }
+    validate() {
+        this.hasError = false;
+        if (!this.value) {
+            return null;
+        }
+        if (this.value && REGEX.POSTAL_CODE.test(this.value.toString())) {
+            this.hasError = false;
+            return null;
+        }
+        else {
+            this.hasError = true;
+            return { invalidPostalCode: true };
+        }
     }
 }
 
 /*
  * Public API Surface of mrd-core
  */
+// abstract/http
 
 /**
  * Generated bundle index. Do not edit.
  */
 
-export { AbstractActivationGuard, AbstractActivationQueuedGuard, AbstractCachedRestservice, AbstractEntityResolver, AbstractReadonlyCachedRestservice, AbstractReadonlyRestservice, AbstractResolver, AbstractRestservice, AbstractRouteConfiguration, AbstractStoredReadonlyRestservice, AbstractStoredRestservice, AccessableControlFactory, AccessableFormArray, AccessableFormControl, AccessableFormGroup, BaseObject, BasePushStrategyObject, BaseRootComponent, DeactivationHandler, HttpStatusCodes, ItemStore, ObservableValue, REGEX, ReadonlyRestHandler, RestHandler, SubscriptionHandler, SubscriptionManager, TimestampItemStore, Type, TypeConverter, Util, ValidatorBetriebsnummer, ValidatorCustom, ValidatorDate, ValidatorEmail, ValidatorFixedValue, ValidatorFloat, ValidatorInteger, ValidatorIntegerRange, ValidatorLength, ValidatorMinValue, ValidatorPostalCode, ValidatorRequired };
+export { AbstractActivationGuard, AbstractActivationQueuedGuard, AbstractCachedRestservice, AbstractEntityResolver, AbstractReadonlyCachedRestservice, AbstractReadonlyRestservice, AbstractResolver, AbstractRestservice, AbstractRouteConfiguration, AbstractStoredReadonlyRestservice, AbstractStoredRestservice, AccessableControlFactory, AccessableFormArray, AccessableFormControl, AccessableFormGroup, BUNDESLAND_IDS, BaseObject, BasePushStrategyObject, BaseRootComponent, DeactivationHandler, GermanFloatDirective, GermanFloatModule, HttpStatusCodes, ItemStore, ObservableValue, REGEX, ROLE_GUARD, ReadonlyRestHandler, RestHandler, RoleGuardDirective, RoleGuardModule, SubscriptionHandler, SubscriptionManager, TimestampItemStore, Type, TypeConverter, Util, ValidatorBetriebsnummer, ValidatorCustom, ValidatorDate, ValidatorEmail, ValidatorFixedValue, ValidatorFloat, ValidatorInteger, ValidatorIntegerRange, ValidatorLength, ValidatorListLength, ValidatorMinValue, ValidatorPostalCode, ValidatorRequired, deactivateGuard };
 //# sourceMappingURL=mrd-core.mjs.map

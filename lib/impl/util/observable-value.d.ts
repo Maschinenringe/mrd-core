@@ -7,7 +7,7 @@ export declare class ObservableValue<TValueType> {
     private readonly equals?;
     private value$;
     readonly changed: Subject<TValueType>;
-    constructor(initialValue?: TValueType, equals?: (current: TValueType, next: TValueType) => boolean);
+    constructor(initialValue?: TValueType, equals?: (current?: TValueType, next?: TValueType) => boolean);
     set value(value: TValueType);
     get value(): TValueType;
     private defaultComparator;

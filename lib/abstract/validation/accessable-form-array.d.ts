@@ -8,7 +8,7 @@ export interface Type<T> extends Function {
 }
 export declare abstract class AccessableFormArray<TModel> implements IAccessableFormControl<AccessableFormArray<TModel>, TModel[]> {
     private validators$;
-    control: FormArray;
+    control: FormArray<any>;
     type: Type<IAccessableFormControl<any, any>>;
     private required$;
     private entries$;
@@ -22,7 +22,7 @@ export declare abstract class AccessableFormArray<TModel> implements IAccessable
     clearValidators(): void;
     generateFormEntry(value: any): IAccessableFormControl<any, TModel>;
     get errors(): string[];
-    get error(): IValidator;
+    get error(): IValidator | undefined;
     get validators(): IValidator[];
     get required(): boolean;
     get dirty(): boolean;

@@ -2,10 +2,10 @@ import { ValidatorFn } from '@angular/forms';
 import { IValidator } from '../../interface/validation/i-validator';
 export declare class ValidatorFixedValue implements IValidator {
     comparator: any;
-    error: string;
+    error: string | undefined;
     hasError: boolean;
     private value$;
-    constructor(comparator: any, error?: string);
+    constructor(comparator: any, error?: string | undefined);
     validate(): any;
     validator(): ValidatorFn;
 }

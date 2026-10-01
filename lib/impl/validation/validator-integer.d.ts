@@ -4,7 +4,7 @@ export declare class ValidatorInteger implements IValidator {
     private allowNegativeValues$;
     error: string;
     hasError: boolean;
-    private value$;
+    private value$?;
     private regex$;
     constructor(allowNegativeValues$?: boolean);
     validate(): any;

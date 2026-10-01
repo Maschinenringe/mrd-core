@@ -15,11 +15,11 @@ export declare class Util {
      * Ansonsten wird true zurückgegeben, wenn das Objekt definiert ist, ansonsten false.
      */
     static isDefinedNotEmptyOrZero(obj: any, returnTheValueIfDefined?: boolean, undefinedReturnValue?: any): boolean | any;
-    static armUrlWithSearchParams(url: string, queryParams: object): string;
+    static armUrlWithSearchParams(url: string, queryParams?: object): string;
     static createEntityUrl(url: string, id: any): string;
     static getBrowser(): string;
     static getCurrentUnixTimestamp(): number;
     static guid(): string;
     private static transformUmlaute;
-    static sortAlpabetically<TListType>(list: TListType[], attribute: string): TListType[];
+    static sortAlpabetically<TListType extends Record<string, any>>(list: TListType[], attribute: string): TListType[];
 }

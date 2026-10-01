@@ -5,7 +5,7 @@ export declare class ValidatorLength implements IValidator {
     minLength?: number;
     static readonly ERROR_MAXLENGTH = "Dieses Feld darf maximal __MAX_LENGTH__ Zeichen enthalten.";
     static readonly ERROR_MINLENGTH = "Dieses Feld muss minimal __MIN_LENGTH__ Zeichen enthalten.";
-    error: string;
+    error: string | undefined;
     hasError: boolean;
     private value;
     constructor(maxLength?: number, minLength?: number);

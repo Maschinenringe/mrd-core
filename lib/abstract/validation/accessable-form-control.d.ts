@@ -4,8 +4,8 @@ import { IAccessableFormControl, IAccessableFormOptions } from '../../interface/
 import { Observable } from 'rxjs';
 export declare class AccessableFormControl<TType = any> implements IAccessableFormControl<AccessableFormControl<TType>, TType> {
     control: FormControl;
-    showAs: (value: any) => any;
-    convertTo: (value: any) => any;
+    showAs?: (value: any) => any;
+    convertTo?: (value: any) => any;
     private required$;
     private validators$;
     private blocked$;
@@ -26,7 +26,7 @@ export declare class AccessableFormControl<TType = any> implements IAccessableFo
     get disabled(): boolean;
     get valid(): boolean;
     get validators(): IValidator[];
-    get error(): IValidator;
+    get error(): IValidator | undefined;
     get value(): any;
     set value(value: any);
     get valueChanges(): Observable<any>;
