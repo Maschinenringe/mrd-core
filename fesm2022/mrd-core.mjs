@@ -854,10 +854,14 @@ class AbstractEntityResolver {
 class ValidatorRequired {
     hasError = false;
     error = 'Pflichtfeld';
+    iconError = 'Dieses Feld ist muss ausgefüllt werden.';
     value;
-    constructor(error) {
+    constructor(error, iconError) {
         if (error) {
             this.error = error;
+        }
+        if (iconError) {
+            this.iconError = iconError;
         }
     }
     validator() {
