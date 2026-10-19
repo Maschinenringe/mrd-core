@@ -1,5 +1,5 @@
 import * as i0 from '@angular/core';
-import { Directive, inject, EnvironmentInjector, runInInjectionContext, Input, NgModule, InjectionToken, Inject } from '@angular/core';
+import { Directive, inject, EnvironmentInjector, runInInjectionContext, Input, Pipe, NgModule, InjectionToken, Inject } from '@angular/core';
 import { take, finalize, takeUntil, tap, switchMap, catchError } from 'rxjs/operators';
 import { Subject, of, Observable, forkJoin, isObservable, from } from 'rxjs';
 import _ from 'underscore';
@@ -1450,6 +1450,66 @@ const REGEX = {
     DATE: /^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/
 };
 
+/** Gemeinsame Formatierung fuer Direktive und Pipe: DD.MM.YYYY bzw. DD.MM.YYYY HH:mm, sonst leer */
+function deutschesDatum(wert, mitZeit = false) {
+    if (!Util.isDefined(wert) || wert === '') {
+        return '';
+    }
+    const datum = moment(wert);
+    return datum.isValid() ? datum.format(mitZeit ? 'DD.MM.YYYY HH:mm' : 'DD.MM.YYYY') : '';
+}
+/** Zeigt ein Datum deutsch an: `<span [appGermanDateTime]="aufgabe.datum" [showTime]="true"></span>` */
+class GermanDateTimeDirective {
+    el;
+    appGermanDateTime;
+    showTime = false;
+    constructor(el) {
+        this.el = el;
+    }
+    ngOnChanges() {
+        this.el.nativeElement.textContent = deutschesDatum(this.appGermanDateTime, this.showTime === true);
+    }
+    /** @nocollapse */ static ɵfac = function GermanDateTimeDirective_Factory(t) { return new (t || GermanDateTimeDirective)(i0.ɵɵdirectiveInject(i0.ElementRef)); };
+    /** @nocollapse */ static ɵdir = /** @pureOrBreakMyCode */ i0.ɵɵdefineDirective({ type: GermanDateTimeDirective, selectors: [["", "appGermanDateTime", ""]], inputs: { appGermanDateTime: "appGermanDateTime", showTime: "showTime" }, features: [i0.ɵɵNgOnChangesFeature] });
+}
+(function () { (typeof ngDevMode === "undefined" || ngDevMode) && i0.ɵsetClassMetadata(GermanDateTimeDirective, [{
+        type: Directive,
+        args: [{
+                selector: '[appGermanDateTime]'
+            }]
+    }], function () { return [{ type: i0.ElementRef }]; }, { appGermanDateTime: [{
+            type: Input
+        }], showTime: [{
+            type: Input
+        }] }); })();
+/** Datum in Interpolationen und Attributen: `{{ aufgabe.datum | deutschesDatum }}`, mit Uhrzeit `| deutschesDatum: true` */
+class DeutschesDatumPipe {
+    transform(wert, mitZeit = false) {
+        return deutschesDatum(wert, mitZeit);
+    }
+    /** @nocollapse */ static ɵfac = function DeutschesDatumPipe_Factory(t) { return new (t || DeutschesDatumPipe)(); };
+    /** @nocollapse */ static ɵpipe = /** @pureOrBreakMyCode */ i0.ɵɵdefinePipe({ name: "deutschesDatum", type: DeutschesDatumPipe, pure: true });
+}
+(function () { (typeof ngDevMode === "undefined" || ngDevMode) && i0.ɵsetClassMetadata(DeutschesDatumPipe, [{
+        type: Pipe,
+        args: [{
+                name: 'deutschesDatum'
+            }]
+    }], null, null); })();
+class GermanDateTimeModule {
+    /** @nocollapse */ static ɵfac = function GermanDateTimeModule_Factory(t) { return new (t || GermanDateTimeModule)(); };
+    /** @nocollapse */ static ɵmod = /** @pureOrBreakMyCode */ i0.ɵɵdefineNgModule({ type: GermanDateTimeModule });
+    /** @nocollapse */ static ɵinj = /** @pureOrBreakMyCode */ i0.ɵɵdefineInjector({});
+}
+(function () { (typeof ngDevMode === "undefined" || ngDevMode) && i0.ɵsetClassMetadata(GermanDateTimeModule, [{
+        type: NgModule,
+        args: [{
+                declarations: [GermanDateTimeDirective, DeutschesDatumPipe],
+                exports: [GermanDateTimeDirective, DeutschesDatumPipe]
+            }]
+    }], null, null); })();
+(function () { (typeof ngJitMode === "undefined" || ngJitMode) && i0.ɵɵsetNgModuleScope(GermanDateTimeModule, { declarations: [GermanDateTimeDirective, DeutschesDatumPipe], exports: [GermanDateTimeDirective, DeutschesDatumPipe] }); })();
+
 class TypeConverter {
     static DATE_REGEX = /(\d{2}).(\d{2}).(\d{4})/;
     static DATE_REGEX_INPUT = /(\d{4})-(\d{2})-(\d{2})/;
@@ -1582,18 +1642,25 @@ class TypeConverter {
     }
 }
 
-/** Zeigt eine Zahl mit Dezimalkomma an, optional mit festen Nachkommastellen und Tausenderpunkt. */
+/**
+ * Zeigt eine Zahl mit Dezimalkomma an, optional mit festen Nachkommastellen (`digits`), einem Bereich
+ * (`minDigits`/`maxDigits`, z. B. 0 bis 2) und Tausenderpunkt. Texte, die keine Zahl sind, erscheinen unveraendert.
+ */
 class GermanFloatDirective {
     el;
     appGermanFloat;
     digits;
     tausendertrennzeichen = false;
+    /** Mindestens so viele Nachkommastellen; nur zusammen mit `maxDigits` und ohne `digits` */
+    minDigits;
+    /** Hoechstens so viele Nachkommastellen (gerundet); nur zusammen mit `minDigits` und ohne `digits` */
+    maxDigits;
     constructor(el) {
         this.el = el;
     }
     ngOnChanges() {
         this.el.nativeElement.innerHTML = Util.isDefined(this.appGermanFloat)
-            ? this.convert(this.appGermanFloat, this.tausendertrennzeichen, this.digits)
+            ? this.convert(this.appGermanFloat, this.tausendertrennzeichen, this.digits) ?? ''
             : '';
     }
     parse(float) {
@@ -1603,6 +1670,17 @@ class GermanFloatDirective {
         return this.convert(float, this.tausendertrennzeichen) ?? '';
     }
     convert(float, tausendertrennzeichen, digits) {
+        // Platzhalter wie "-" oder bereits deutsch formatierte Texte sollen nicht als NaN erscheinen
+        if (typeof float === 'string' && (float.trim() === '' || Number.isNaN(Number(float)))) {
+            return float;
+        }
+        if (!Util.isDefined(digits) && Util.isDefined(this.minDigits) && Util.isDefined(this.maxDigits)) {
+            return Number(Number(float).toFixed(this.maxDigits)).toLocaleString('de-DE', {
+                minimumFractionDigits: this.minDigits,
+                maximumFractionDigits: this.maxDigits,
+                useGrouping: tausendertrennzeichen
+            });
+        }
         if (!tausendertrennzeichen) {
             return Util.isDefined(digits) ? TypeConverter.asGermanFloat(float, digits) : TypeConverter.asGermanFloat(float);
         }
@@ -1615,7 +1693,7 @@ class GermanFloatDirective {
         });
     }
     /** @nocollapse */ static ɵfac = function GermanFloatDirective_Factory(t) { return new (t || GermanFloatDirective)(i0.ɵɵdirectiveInject(i0.ElementRef)); };
-    /** @nocollapse */ static ɵdir = /** @pureOrBreakMyCode */ i0.ɵɵdefineDirective({ type: GermanFloatDirective, selectors: [["", "appGermanFloat", ""]], inputs: { appGermanFloat: "appGermanFloat", digits: "digits", tausendertrennzeichen: "tausendertrennzeichen" }, features: [i0.ɵɵNgOnChangesFeature] });
+    /** @nocollapse */ static ɵdir = /** @pureOrBreakMyCode */ i0.ɵɵdefineDirective({ type: GermanFloatDirective, selectors: [["", "appGermanFloat", ""]], inputs: { appGermanFloat: "appGermanFloat", digits: "digits", tausendertrennzeichen: "tausendertrennzeichen", minDigits: "minDigits", maxDigits: "maxDigits" }, features: [i0.ɵɵNgOnChangesFeature] });
 }
 (function () { (typeof ngDevMode === "undefined" || ngDevMode) && i0.ɵsetClassMetadata(GermanFloatDirective, [{
         type: Directive,
@@ -1627,6 +1705,10 @@ class GermanFloatDirective {
         }], digits: [{
             type: Input
         }], tausendertrennzeichen: [{
+            type: Input
+        }], minDigits: [{
+            type: Input
+        }], maxDigits: [{
             type: Input
         }] }); })();
 class GermanFloatModule {
@@ -1783,6 +1865,79 @@ class DeactivationHandler {
                     this._deactivateComponent(index + 1, observer);
                 }
             }));
+        }
+    }
+}
+
+/**
+ * Typisierter Zugriff auf den localStorage fuer Einstellungen wie Sortierung, Filter oder gewaehltes Erntejahr.
+ * Lesen liefert null, wenn nichts oder etwas Unpassendes gespeichert ist; leere Werte entfernen den Eintrag.
+ * Ist der Speicher gesperrt (privater Modus, blockierte Website-Daten), wird nichts gespeichert und null gelesen.
+ *
+ * `LokalerSpeicher.ganzzahl('selectedErntejahr')`, `LokalerSpeicher.schreiben('selectedErntejahr', 2026)`
+ */
+class LokalerSpeicher {
+    /** Text; ein leerer Text gilt als nicht gespeichert */
+    static text(schluessel) {
+        const wert = LokalerSpeicher.lesen(schluessel);
+        return Util.isDefined(wert) && wert !== '' ? wert : null;
+    }
+    /** Nicht-negative Ganzzahl, z. B. eine Id */
+    static ganzzahl(schluessel) {
+        const wert = LokalerSpeicher.lesen(schluessel);
+        return Util.isDefined(wert) && REGEX.INTEGER.test(wert) ? Number.parseInt(wert, 10) : null;
+    }
+    /** true/false, gespeichert als "true" bzw. "false" */
+    static wahrheitswert(schluessel) {
+        const wert = LokalerSpeicher.lesen(schluessel);
+        return wert === 'true' ? true : wert === 'false' ? false : null;
+    }
+    /** Einer der erlaubten Werte, z. B. eine Sortierrichtung; alles andere gilt als nicht gespeichert */
+    static auswahl(schluessel, erlaubt) {
+        const wert = LokalerSpeicher.lesen(schluessel);
+        return Util.isDefined(wert) && erlaubt.includes(wert) ? wert : null;
+    }
+    /** Als JSON gespeichertes Objekt; nicht lesbares JSON gilt als nicht gespeichert */
+    static json(schluessel) {
+        const wert = LokalerSpeicher.text(schluessel);
+        if (!Util.isDefined(wert)) {
+            return null;
+        }
+        try {
+            return JSON.parse(wert);
+        }
+        catch {
+            return null;
+        }
+    }
+    /** Speichert Texte, Zahlen und Wahrheitswerte als Text, Objekte als JSON; null, undefined und '' entfernen den Eintrag */
+    static schreiben(schluessel, wert) {
+        if (!Util.isDefined(wert) || wert === '') {
+            LokalerSpeicher.entfernen(schluessel);
+            return;
+        }
+        const text = typeof wert === 'object' ? JSON.stringify(wert) : String(wert);
+        try {
+            localStorage.setItem(schluessel, text);
+        }
+        catch {
+            // Gesperrter oder voller Speicher: die Einstellung gilt dann nur bis zum Neuladen
+        }
+    }
+    static entfernen(schluessel) {
+        try {
+            localStorage.removeItem(schluessel);
+        }
+        catch {
+            // Gesperrter Speicher: es gibt nichts zu entfernen
+        }
+    }
+    static lesen(schluessel) {
+        try {
+            return localStorage.getItem(schluessel);
+        }
+        catch {
+            return null;
         }
     }
 }
@@ -2255,6 +2410,54 @@ class ValidatorDate {
     }
 }
 
+/**
+ * Datum muss innerhalb der Grenzen liegen, jeweils einschliesslich des Grenztages; beide Grenzen sind optional.
+ * Geprueft werden nur Moment-Werte, unfertige Eingaben bleiben dem ValidatorDate ueberlassen.
+ */
+class ValidatorDateRange {
+    fehlertext;
+    error = '';
+    hasError = false;
+    value;
+    von;
+    bis;
+    /**
+     * @param von Fruehestes erlaubtes Datum
+     * @param bis Spaetestes erlaubtes Datum
+     * @param fehlertext Eigener Text statt der Standardmeldung, z. B. in du-Form
+     */
+    constructor(von, bis, fehlertext) {
+        this.fehlertext = fehlertext;
+        // Kopien, damit die Datumswerte des Aufrufers nicht auf Tagesanfang/-ende verschoben werden
+        this.von = Util.isDefined(von) ? moment(von).startOf('day') : undefined;
+        this.bis = Util.isDefined(bis) ? moment(bis).endOf('day') : undefined;
+    }
+    validator() {
+        return (input) => {
+            this.value = input.value;
+            return this.validate();
+        };
+    }
+    validate() {
+        this.hasError = false;
+        if (!moment.isMoment(this.value)) {
+            return null;
+        }
+        if (Util.isDefined(this.von) && this.value.isBefore(this.von)) {
+            return this.fehler(`Bitte wählen Sie einen Zeitpunkt nach dem ${this.von.clone().subtract(1, 'day').format('DD.MM.YYYY')}`);
+        }
+        if (Util.isDefined(this.bis) && this.value.isAfter(this.bis)) {
+            return this.fehler(`Bitte wählen Sie einen Zeitpunkt vor dem ${this.bis.clone().add(1, 'day').format('DD.MM.YYYY')}`);
+        }
+        return null;
+    }
+    fehler(standard) {
+        this.error = this.fehlertext ?? standard;
+        this.hasError = true;
+        return { invalidDateRange: true };
+    }
+}
+
 class ValidatorEmail {
     hasError = false;
     error = 'Bitte geben Sie eine gültige E-Mail ein';
@@ -2442,6 +2645,52 @@ class ValidatorLength {
     }
 }
 
+/** Laesst nur Datumswerte an oder vor dem uebergebenen Tag zu; leere und ungueltige Werte prueft ValidatorDate. */
+class ValidatorMaxDate {
+    error;
+    iconError;
+    hasError = false;
+    value;
+    maxDatum;
+    /**
+     * @param maxDate Spaetester erlaubter Tag
+     * @param fehlertext Eigener Text statt der Standardmeldung, z. B. in du-Form
+     */
+    constructor(maxDate, fehlertext, iconFehlertext) {
+        this.maxDatum = moment(maxDate);
+        this.error = fehlertext ?? `Bitte wähle ein Datum vor dem ${this.maxDatum.clone().add(1, 'day').format('DD.MM.YYYY')}`;
+        this.iconError = iconFehlertext ?? `Bitte wähle ein Datum vor dem ${this.maxDatum.clone().add(1, 'day').format('DD.MM.YYYY')}`;
+    }
+    validator() {
+        return (input) => {
+            this.value = input.value;
+            return this.validate();
+        };
+    }
+    validate() {
+        this.hasError = false;
+        const datum = this.alsDatum(this.value);
+        if (!Util.isDefined(datum) || !datum.isValid()) {
+            return null;
+        }
+        if (datum.isAfter(this.maxDatum, 'day')) {
+            this.hasError = true;
+            return { invalidMaxDate: true };
+        }
+        return null;
+    }
+    /** Texte kommen aus Eingabefeldern im deutschen Format */
+    alsDatum(wert) {
+        if (moment.isMoment(wert) || wert instanceof Date) {
+            return moment(wert);
+        }
+        if (typeof wert === 'string' && wert.trim() !== '') {
+            return moment(wert, ['D.M.YYYY', 'YYYY-MM-DD'], true);
+        }
+        return null;
+    }
+}
+
 /** Prueft, ob eine Liste mindestens `minSize` Elemente enthaelt. */
 class ValidatorListLength {
     minSize;
@@ -2532,6 +2781,40 @@ class ValidatorPostalCode {
     }
 }
 
+/** Prueft Uhrzeiten im Format HH:mm; Moment-Werte gelten als gueltig, wenn sie gueltig sind. */
+class ValidatorTime {
+    static TIME_FORMAT = 'HH:mm';
+    error;
+    iconError;
+    hasError = false;
+    value;
+    /** @param fehlertext Eigener Text statt der Standardmeldung */
+    constructor(fehlertext, iconFehlertext) {
+        this.error = fehlertext ?? 'Uhrzeit ungültig';
+        this.iconError = iconFehlertext ?? 'Bitte gib eine gültige Uhrzeit ein';
+    }
+    validator() {
+        return (input) => {
+            this.value = input.value;
+            return this.validate();
+        };
+    }
+    validate() {
+        this.hasError = false;
+        if (!this.value) {
+            return null;
+        }
+        const gueltig = moment.isMoment(this.value)
+            ? this.value.isValid()
+            : typeof this.value === 'string' && moment(this.value, ValidatorTime.TIME_FORMAT, true).isValid();
+        if (gueltig) {
+            return null;
+        }
+        this.hasError = true;
+        return { invalidTime: true };
+    }
+}
+
 /*
  * Public API Surface of mrd-core
  */
@@ -2541,5 +2824,5 @@ class ValidatorPostalCode {
  * Generated bundle index. Do not edit.
  */
 
-export { AbstractActivationGuard, AbstractActivationQueuedGuard, AbstractCachedRestservice, AbstractEntityResolver, AbstractReadonlyCachedRestservice, AbstractReadonlyRestservice, AbstractResolver, AbstractRestservice, AbstractRouteConfiguration, AbstractStoredReadonlyRestservice, AbstractStoredRestservice, AccessableControlFactory, AccessableFormArray, AccessableFormControl, AccessableFormGroup, BUNDESLAND_IDS, BaseObject, BasePushStrategyObject, BaseRootComponent, DeactivationHandler, GermanFloatDirective, GermanFloatModule, HttpStatusCodes, ItemStore, ObservableValue, REGEX, ROLE_GUARD, ReadonlyRestHandler, RestHandler, RoleGuardDirective, RoleGuardModule, SubscriptionHandler, SubscriptionManager, TimestampItemStore, Type, TypeConverter, Util, ValidatorBetriebsnummer, ValidatorCustom, ValidatorDate, ValidatorEmail, ValidatorFixedValue, ValidatorFloat, ValidatorInteger, ValidatorIntegerRange, ValidatorLength, ValidatorListLength, ValidatorMinValue, ValidatorPostalCode, ValidatorRequired, deactivateGuard };
+export { AbstractActivationGuard, AbstractActivationQueuedGuard, AbstractCachedRestservice, AbstractEntityResolver, AbstractReadonlyCachedRestservice, AbstractReadonlyRestservice, AbstractResolver, AbstractRestservice, AbstractRouteConfiguration, AbstractStoredReadonlyRestservice, AbstractStoredRestservice, AccessableControlFactory, AccessableFormArray, AccessableFormControl, AccessableFormGroup, BUNDESLAND_IDS, BaseObject, BasePushStrategyObject, BaseRootComponent, DeactivationHandler, DeutschesDatumPipe, GermanDateTimeDirective, GermanDateTimeModule, GermanFloatDirective, GermanFloatModule, HttpStatusCodes, ItemStore, LokalerSpeicher, ObservableValue, REGEX, ROLE_GUARD, ReadonlyRestHandler, RestHandler, RoleGuardDirective, RoleGuardModule, SubscriptionHandler, SubscriptionManager, TimestampItemStore, Type, TypeConverter, Util, ValidatorBetriebsnummer, ValidatorCustom, ValidatorDate, ValidatorDateRange, ValidatorEmail, ValidatorFixedValue, ValidatorFloat, ValidatorInteger, ValidatorIntegerRange, ValidatorLength, ValidatorListLength, ValidatorMaxDate, ValidatorMinValue, ValidatorPostalCode, ValidatorRequired, ValidatorTime, deactivateGuard, deutschesDatum };
 //# sourceMappingURL=mrd-core.mjs.map
