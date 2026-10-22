@@ -13,4 +13,10 @@ export declare abstract class AbstractStoredReadonlyRestservice<TModel> extends 
     protected constructor(restServiceObserver?: ReadonlyRestServiceObserver<TModel>);
     all(searchParams?: object, httpOptions?: object): Observable<TModel[]>;
     show(id: any, getParams?: object, httpOptions?: object): Observable<TModel>;
+    /**
+     * Basis-URL je Methode, ohne Id des Eintrags (die haengt der Handler an). Ueberschreiben, wenn eine Methode
+     * eine andere URL braucht als `url`, z. B. Lesen ueber mehrere Betriebe, Schreiben nur fuer den des Eintrags.
+     */
+    protected urlFuerAll(): string;
+    protected urlFuerShow(id: any): string;
 }

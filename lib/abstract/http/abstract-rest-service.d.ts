@@ -13,4 +13,11 @@ export declare abstract class AbstractRestservice<T> extends AbstractReadonlyRes
     partialUpdate(model: T, getParams?: object, httpOptions?: object): Observable<T>;
     save(model: T, getParams?: object, httpOptions?: object): Observable<T>;
     update(model: T, getParams?: object, httpOptions?: object): Observable<T>;
+    /** Basis-URLs der Schreibmethoden, siehe `urlFuerAll`; ohne Ueberschreiben gilt `url`. */
+    protected urlFuerCreate(model: T): string;
+    protected urlFuerUpdate(model: T): string;
+    protected urlFuerPartialUpdate(model: T): string;
+    protected urlFuerDestroy(id: any): string;
+    /** `save` legt an oder aktualisiert, je nachdem ob der Eintrag schon eine Id hat. */
+    protected urlFuerSave(model: T): string;
 }

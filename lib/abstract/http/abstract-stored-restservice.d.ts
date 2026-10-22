@@ -13,4 +13,14 @@ export declare abstract class AbstractStoredRestservice<TModel> extends Abstract
     update(model: TModel, getParams?: object, httpOptions?: object): Observable<TModel>;
     protected modifyCreateCall(observable: Observable<TModel>): Observable<TModel>;
     protected modifyUpdateCall(observable: Observable<TModel>): Observable<TModel>;
+    /** Basis-URLs der Schreibmethoden, siehe `urlFuerAll`; ohne Ueberschreiben gilt `url`. */
+    protected urlFuerCreate(model: TModel): string;
+    protected urlFuerUpdate(model: TModel): string;
+    protected urlFuerPartialUpdate(model: TModel): string;
+    protected urlFuerSet(model: TModel): string;
+    /** Fuer `destroy` ist nur die Id bekannt; den Eintrag dazu liefert bei Bedarf der Store. */
+    protected urlFuerDestroy(id: any): string;
+    /** `save` legt an oder aktualisiert, je nachdem ob der Eintrag schon eine Id hat. */
+    protected urlFuerSave(model: TModel): string;
+    private hatId;
 }

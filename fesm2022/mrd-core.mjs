@@ -278,16 +278,26 @@ class AbstractStoredReadonlyRestservice extends BaseObject {
             new ReadonlyRestServiceObserver();
     }
     all(searchParams, httpOptions) {
-        return new ReadonlyRestHandler(this.http, this.url, this.observer).all(searchParams, httpOptions)
+        return new ReadonlyRestHandler(this.http, this.urlFuerAll(), this.observer).all(searchParams, httpOptions)
             .pipe(tap((response) => {
             this.store.updateItems(response);
         }));
     }
     show(id, getParams, httpOptions) {
-        return new ReadonlyRestHandler(this.http, this.url, this.observer).show(id, getParams, httpOptions)
+        return new ReadonlyRestHandler(this.http, this.urlFuerShow(id), this.observer).show(id, getParams, httpOptions)
             .pipe(tap((response) => {
             this.store.update(response);
         }));
+    }
+    /**
+     * Basis-URL je Methode, ohne Id des Eintrags (die haengt der Handler an). Ueberschreiben, wenn eine Methode
+     * eine andere URL braucht als `url`, z. B. Lesen ueber mehrere Betriebe, Schreiben nur fuer den des Eintrags.
+     */
+    urlFuerAll() {
+        return this.url;
+    }
+    urlFuerShow(id) {
+        return this.url;
     }
 }
 
@@ -452,28 +462,28 @@ class RestHandler {
 class AbstractCachedRestservice extends AbstractReadonlyCachedRestservice {
     observer = new RestServiceObserver();
     create(model, getParams, httpOptions) {
-        let request = new RestHandler(this.http, this.url, this.observer, this.identifier)
+        let request = new RestHandler(this.http, this.urlFuerCreate(model), this.observer, this.identifier)
             .create(model, getParams, httpOptions);
         return this.modifyCreateCall(request);
     }
     destroy(id, getParams, httpOptions) {
-        return new RestHandler(this.http, this.url, this.observer, this.identifier)
+        return new RestHandler(this.http, this.urlFuerDestroy(id), this.observer, this.identifier)
             .destroy(id, getParams, httpOptions)
             .pipe(tap(() => {
             this.store.removeByIdentifier(id);
         }));
     }
     partialUpdate(model, getParams, httpOptions) {
-        return new RestHandler(this.http, this.url, this.observer, this.identifier)
+        return new RestHandler(this.http, this.urlFuerPartialUpdate(model), this.observer, this.identifier)
             .partialUpdate(model, getParams, httpOptions)
             .pipe(tap((result) => {
             this.store.update(result);
         }));
     }
     save(model, getParams, httpOptions) {
-        let request = new RestHandler(this.http, this.url, this.observer, this.identifier)
+        let request = new RestHandler(this.http, this.urlFuerSave(model), this.observer, this.identifier)
             .save(model, getParams, httpOptions);
-        if (Util.isDefined(model[this.identifier])) {
+        if (this.hatId(model)) {
             request = this.modifyUpdateCall(request);
         }
         else {
@@ -482,9 +492,9 @@ class AbstractCachedRestservice extends AbstractReadonlyCachedRestservice {
         return request;
     }
     set(model, getParams, httpOptions) {
-        let request = new RestHandler(this.http, this.url, this.observer, this.identifier)
+        let request = new RestHandler(this.http, this.urlFuerSet(model), this.observer, this.identifier)
             .set(model, getParams, httpOptions);
-        if (Util.isDefined(model[this.identifier])) {
+        if (this.hatId(model)) {
             request = this.modifyUpdateCall(request);
         }
         else {
@@ -493,7 +503,7 @@ class AbstractCachedRestservice extends AbstractReadonlyCachedRestservice {
         return request;
     }
     update(model, getParams, httpOptions) {
-        let request = new RestHandler(this.http, this.url, this.observer, this.identifier)
+        let request = new RestHandler(this.http, this.urlFuerUpdate(model), this.observer, this.identifier)
             .update(model, getParams, httpOptions);
         request = this.modifyUpdateCall(request);
         return request;
@@ -507,6 +517,30 @@ class AbstractCachedRestservice extends AbstractReadonlyCachedRestservice {
         return observable.pipe(tap((result) => {
             this.store.update(result);
         }));
+    }
+    /** Basis-URLs der Schreibmethoden, siehe `urlFuerAll`; ohne Ueberschreiben gilt `url`. */
+    urlFuerCreate(model) {
+        return this.url;
+    }
+    urlFuerUpdate(model) {
+        return this.url;
+    }
+    urlFuerPartialUpdate(model) {
+        return this.url;
+    }
+    urlFuerSet(model) {
+        return this.url;
+    }
+    /** Fuer `destroy` ist nur die Id bekannt; den Eintrag dazu liefert bei Bedarf der Store. */
+    urlFuerDestroy(id) {
+        return this.url;
+    }
+    /** `save` legt an oder aktualisiert, je nachdem ob der Eintrag schon eine Id hat. */
+    urlFuerSave(model) {
+        return this.hatId(model) ? this.urlFuerUpdate(model) : this.urlFuerCreate(model);
+    }
+    hatId(model) {
+        return Util.isDefined(model[this.identifier]);
     }
 }
 
@@ -519,10 +553,20 @@ class AbstractReadonlyRestservice extends BaseObject {
             new ReadonlyRestServiceObserver();
     }
     all(searchParams, httpOptions) {
-        return new ReadonlyRestHandler(this.http, this.url, this.observer).all(searchParams, httpOptions);
+        return new ReadonlyRestHandler(this.http, this.urlFuerAll(), this.observer).all(searchParams, httpOptions);
     }
     show(id, getParams, httpOptions) {
-        return new ReadonlyRestHandler(this.http, this.url, this.observer).show(id, getParams, httpOptions);
+        return new ReadonlyRestHandler(this.http, this.urlFuerShow(id), this.observer).show(id, getParams, httpOptions);
+    }
+    /**
+     * Basis-URL je Methode, ohne Id des Eintrags (die haengt der Handler an). Ueberschreiben, wenn eine Methode
+     * eine andere URL braucht als `url`, z. B. Lesen ueber mehrere Betriebe, Schreiben nur fuer den des Eintrags.
+     */
+    urlFuerAll() {
+        return this.url;
+    }
+    urlFuerShow(id) {
+        return this.url;
     }
 }
 
@@ -531,20 +575,37 @@ class AbstractRestservice extends AbstractReadonlyRestservice {
         super(new RestServiceObserver());
     }
     create(model, getParams, httpOptions) {
-        return new RestHandler(this.http, this.url, this.observer, this.identifier).create(model, getParams, httpOptions);
+        return new RestHandler(this.http, this.urlFuerCreate(model), this.observer, this.identifier).create(model, getParams, httpOptions);
     }
     destroy(id, getParams, httpOptions) {
-        return new RestHandler(this.http, this.url, this.observer, this.identifier).destroy(id, getParams, httpOptions);
+        return new RestHandler(this.http, this.urlFuerDestroy(id), this.observer, this.identifier).destroy(id, getParams, httpOptions);
     }
     partialUpdate(model, getParams, httpOptions) {
-        return new RestHandler(this.http, this.url, this.observer, this.identifier)
+        return new RestHandler(this.http, this.urlFuerPartialUpdate(model), this.observer, this.identifier)
             .partialUpdate(model, getParams, httpOptions);
     }
     save(model, getParams, httpOptions) {
-        return new RestHandler(this.http, this.url, this.observer, this.identifier).save(model, getParams, httpOptions);
+        return new RestHandler(this.http, this.urlFuerSave(model), this.observer, this.identifier).save(model, getParams, httpOptions);
     }
     update(model, getParams, httpOptions) {
-        return new RestHandler(this.http, this.url, this.observer, this.identifier).update(model, getParams, httpOptions);
+        return new RestHandler(this.http, this.urlFuerUpdate(model), this.observer, this.identifier).update(model, getParams, httpOptions);
+    }
+    /** Basis-URLs der Schreibmethoden, siehe `urlFuerAll`; ohne Ueberschreiben gilt `url`. */
+    urlFuerCreate(model) {
+        return this.url;
+    }
+    urlFuerUpdate(model) {
+        return this.url;
+    }
+    urlFuerPartialUpdate(model) {
+        return this.url;
+    }
+    urlFuerDestroy(id) {
+        return this.url;
+    }
+    /** `save` legt an oder aktualisiert, je nachdem ob der Eintrag schon eine Id hat. */
+    urlFuerSave(model) {
+        return Util.isDefined(model[this.identifier]) ? this.urlFuerUpdate(model) : this.urlFuerCreate(model);
     }
 }
 
@@ -553,28 +614,28 @@ class AbstractStoredRestservice extends AbstractStoredReadonlyRestservice {
         super(new RestServiceObserver());
     }
     create(model, getParams, httpOptions) {
-        let request = new RestHandler(this.http, this.url, this.observer, this.identifier)
+        let request = new RestHandler(this.http, this.urlFuerCreate(model), this.observer, this.identifier)
             .create(model, getParams, httpOptions);
         return this.modifyCreateCall(request);
     }
     destroy(id, getParams, httpOptions) {
-        return new RestHandler(this.http, this.url, this.observer, this.identifier)
+        return new RestHandler(this.http, this.urlFuerDestroy(id), this.observer, this.identifier)
             .destroy(id, getParams, httpOptions)
             .pipe(tap(() => {
             this.store.removeByIdentifier(id);
         }));
     }
     partialUpdate(model, getParams, httpOptions) {
-        return new RestHandler(this.http, this.url, this.observer, this.identifier)
+        return new RestHandler(this.http, this.urlFuerPartialUpdate(model), this.observer, this.identifier)
             .partialUpdate(model, getParams, httpOptions)
             .pipe(tap((result) => {
             this.store.update(result);
         }));
     }
     save(model, getParams, httpOptions) {
-        let request = new RestHandler(this.http, this.url, this.observer, this.identifier)
+        let request = new RestHandler(this.http, this.urlFuerSave(model), this.observer, this.identifier)
             .save(model, getParams, httpOptions);
-        if (Util.isDefined(model[this.identifier])) {
+        if (this.hatId(model)) {
             request = this.modifyUpdateCall(request);
         }
         else {
@@ -583,9 +644,9 @@ class AbstractStoredRestservice extends AbstractStoredReadonlyRestservice {
         return request;
     }
     set(model, getParams, httpOptions) {
-        let request = new RestHandler(this.http, this.url, this.observer, this.identifier)
+        let request = new RestHandler(this.http, this.urlFuerSet(model), this.observer, this.identifier)
             .set(model, getParams, httpOptions);
-        if (Util.isDefined(model[this.identifier])) {
+        if (this.hatId(model)) {
             request = this.modifyUpdateCall(request);
         }
         else {
@@ -594,7 +655,7 @@ class AbstractStoredRestservice extends AbstractStoredReadonlyRestservice {
         return request;
     }
     update(model, getParams, httpOptions) {
-        let request = new RestHandler(this.http, this.url, this.observer, this.identifier)
+        let request = new RestHandler(this.http, this.urlFuerUpdate(model), this.observer, this.identifier)
             .update(model, getParams, httpOptions);
         request = this.modifyUpdateCall(request);
         return request;
@@ -608,6 +669,30 @@ class AbstractStoredRestservice extends AbstractStoredReadonlyRestservice {
         return observable.pipe(tap((result) => {
             this.store.update(result);
         }));
+    }
+    /** Basis-URLs der Schreibmethoden, siehe `urlFuerAll`; ohne Ueberschreiben gilt `url`. */
+    urlFuerCreate(model) {
+        return this.url;
+    }
+    urlFuerUpdate(model) {
+        return this.url;
+    }
+    urlFuerPartialUpdate(model) {
+        return this.url;
+    }
+    urlFuerSet(model) {
+        return this.url;
+    }
+    /** Fuer `destroy` ist nur die Id bekannt; den Eintrag dazu liefert bei Bedarf der Store. */
+    urlFuerDestroy(id) {
+        return this.url;
+    }
+    /** `save` legt an oder aktualisiert, je nachdem ob der Eintrag schon eine Id hat. */
+    urlFuerSave(model) {
+        return this.hatId(model) ? this.urlFuerUpdate(model) : this.urlFuerCreate(model);
+    }
+    hatId(model) {
+        return Util.isDefined(model[this.identifier]);
     }
 }
 
