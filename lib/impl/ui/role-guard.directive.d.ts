@@ -15,12 +15,21 @@ export declare class RoleGuardDirective extends BaseObject implements OnInit {
     configname: string;
     /** Formular, das bei Leserecht gesperrt wird (nur mit `configname="readonly-form"`) */
     readonlyFormControl?: AccessableFormGroup<any, any>;
+    private sperrTimeout?;
     constructor(el: ElementRef, roleGuard: IRoleGuard);
     ngOnInit(): void;
     private checkElement;
     /** Listen laden ihre Eintraege nachtraeglich - neue Unterelemente muessen erneut geprueft werden. */
     private watchChildren;
     private lockFormIfReadonly;
+    private formSperrenVerzoegert;
+    /**
+     * `disable()` feuert selbst statusChanges - ohne die Pruefung auf `disabled` wuerde endlos neu gesperrt.
+     * `mrd-form-field` markiert Felder dabei als dirty; ohne Benutzereingabe gilt das Formular weiter als unveraendert,
+     * sonst fragt jeder Wechsel des Eintrags grundlos nach dem Verwerfen.
+     */
+    private formSperren;
+    ngOnDestroy(): void;
     /** Ohne Rollenpruefung entfallen Ersatz-Elemente und Readonly-Titel; der Rest wartet auf die Menuepruefung. */
     private checkWithoutRoleGuard;
     private hideUntilChecked;

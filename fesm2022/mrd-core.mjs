@@ -1824,6 +1824,7 @@ class RoleGuardDirective extends BaseObject {
     configname;
     /** Formular, das bei Leserecht gesperrt wird (nur mit `configname="readonly-form"`) */
     readonlyFormControl;
+    sperrTimeout;
     constructor(el, roleGuard) {
         super();
         this.el = el;
@@ -1864,14 +1865,34 @@ class RoleGuardDirective extends BaseObject {
         if (!this.roleGuard.isCurrentPageReadonly) {
             return;
         }
-        this.readonlyFormControl.disable();
+        this.formSperren();
         // Das Formular aktiviert sich bei Wertwechseln teils selbst wieder, daher erneut sperren.
-        this.watch(this.readonlyFormControl.valueChanges, new SubscriptionHandler(() => {
-            setTimeout(() => this.readonlyFormControl.disable(), 100);
-        }));
-        this.watch(this.readonlyFormControl.control.statusChanges, new SubscriptionHandler(() => {
-            setTimeout(() => this.readonlyFormControl.disable(), 100);
-        }));
+        this.watch(this.readonlyFormControl.valueChanges, new SubscriptionHandler(() => this.formSperrenVerzoegert()));
+        this.watch(this.readonlyFormControl.control.statusChanges, new SubscriptionHandler(() => this.formSperrenVerzoegert()));
+    }
+    formSperrenVerzoegert() {
+        clearTimeout(this.sperrTimeout);
+        this.sperrTimeout = setTimeout(() => this.formSperren(), 100);
+    }
+    /**
+     * `disable()` feuert selbst statusChanges - ohne die Pruefung auf `disabled` wuerde endlos neu gesperrt.
+     * `mrd-form-field` markiert Felder dabei als dirty; ohne Benutzereingabe gilt das Formular weiter als unveraendert,
+     * sonst fragt jeder Wechsel des Eintrags grundlos nach dem Verwerfen.
+     */
+    formSperren() {
+        const form = this.readonlyFormControl;
+        if (form.disabled) {
+            return;
+        }
+        const warGeaendert = form.dirty;
+        form.disable();
+        if (!warGeaendert) {
+            form.markAsUnchanged();
+        }
+    }
+    ngOnDestroy() {
+        clearTimeout(this.sperrTimeout);
+        super.ngOnDestroy();
     }
     /** Ohne Rollenpruefung entfallen Ersatz-Elemente und Readonly-Titel; der Rest wartet auf die Menuepruefung. */
     checkWithoutRoleGuard() {
