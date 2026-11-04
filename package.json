@@ -1,6 +1,6 @@
 {
   "name": "mrd-core",
-  "version": "v1.16.37",
+  "version": "v1.16.38",
   "peerDependencies": {
     "@angular/common": "^16.1.7",
     "@angular/core": "^16.1.7",

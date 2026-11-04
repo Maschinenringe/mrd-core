@@ -1,5 +1,5 @@
 import * as i0 from '@angular/core';
-import { Directive, inject, EnvironmentInjector, runInInjectionContext, Input, Pipe, NgModule, InjectionToken, Inject } from '@angular/core';
+import { Directive, Injector, inject, EnvironmentInjector, runInInjectionContext, Input, Pipe, NgModule, InjectionToken, Inject } from '@angular/core';
 import { take, finalize, takeUntil, tap, switchMap, catchError } from 'rxjs/operators';
 import { Subject, of, Observable, forkJoin, isObservable, from } from 'rxjs';
 import _ from 'underscore';
@@ -272,10 +272,47 @@ class ReadonlyRestHandler {
 
 class AbstractStoredReadonlyRestservice extends BaseObject {
     observer;
+    /** Injector, der diesen Service erzeugt hat; ohne DI erzeugte Instanzen (z. B. in Tests mit `new`) haben keinen. */
+    erzeugendeInjector = AbstractStoredReadonlyRestservice.injectorImKontext();
+    bereiche = new Map();
     constructor(restServiceObserver) {
         super();
         this.observer = Util.isDefined(restServiceObserver) ? restServiceObserver :
             new ReadonlyRestServiceObserver();
+    }
+    /**
+     * Eigene Instanz dieses Services fuer einen Bereich der Anwendung (z. B. eine Maske, die Daten eines anderen Betriebs
+     * laedt), damit sie den Store der Seite nicht ueberschreibt. Sie hat eigenen Store und eigenen Kontext (`forBetrieb`
+     * usw.), teilt aber die Abhaengigkeiten (HttpClient, andere Services) mit dieser Instanz. Je Name gibt es eine Instanz.
+     */
+    bereich(name) {
+        let instanz = this.bereiche.get(name);
+        if (!Util.isDefined(instanz)) {
+            if (!Util.isDefined(this.erzeugendeInjector)) {
+                throw new Error(`${this.constructor.name}.bereich('${name}'): nur fuer per Dependency Injection erzeugte Services`);
+            }
+            const typ = this.constructor;
+            instanz = Injector.create({ providers: [{ provide: typ, useClass: typ }], parent: this.erzeugendeInjector }).get(typ);
+            this.bereiche.set(name, instanz);
+        }
+        return instanz;
+    }
+    /** Leert den Store des Bereichs und gibt die Instanz frei; der naechste Aufruf von `bereich(name)` beginnt neu. */
+    bereichFreigeben(name) {
+        const instanz = this.bereiche.get(name);
+        if (Util.isDefined(instanz)) {
+            instanz.store.clear();
+            instanz.ngOnDestroy();
+            this.bereiche.delete(name);
+        }
+    }
+    static injectorImKontext() {
+        try {
+            return inject(Injector);
+        }
+        catch {
+            return null;
+        }
     }
     all(searchParams, httpOptions) {
         return new ReadonlyRestHandler(this.http, this.urlFuerAll(), this.observer).all(searchParams, httpOptions)
