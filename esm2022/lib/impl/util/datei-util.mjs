@@ -1,0 +1,29 @@
+/** Dateien im Browser speichern und Dateinamen aus HTTP-Antworten lesen. */
+export class DateiUtil {
+    /** Speichert die Datei im Download-Ordner des Benutzers (ueber einen unsichtbaren Link). */
+    static speichern(datei, dateiname) {
+        const url = URL.createObjectURL(datei);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = dateiname;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        // Erst nach dem Start des Downloads freigeben, sonst bricht Firefox ihn ab
+        setTimeout(() => URL.revokeObjectURL(url));
+    }
+    /** Dateiname aus dem Header `Content-Disposition`; RFC 5987 (`filename*=UTF-8''...`) hat Vorrang vor `filename=`. */
+    static dateinameAusContentDisposition(header) {
+        if (!header) {
+            return null;
+        }
+        const erweitert = /filename\*=UTF-8''([^;]+)/i.exec(header);
+        if (erweitert) {
+            return decodeURIComponent(erweitert[1].trim());
+        }
+        const einfach = /filename="?([^";]+)"?/i.exec(header);
+        return einfach ? einfach[1].trim() : null;
+    }
+}
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiZGF0ZWktdXRpbC5qcyIsInNvdXJjZVJvb3QiOiIiLCJzb3VyY2VzIjpbIi4uLy4uLy4uLy4uLy4uLy4uL3Byb2plY3RzL21yZC1jb3JlL3NyYy9saWIvaW1wbC91dGlsL2RhdGVpLXV0aWwudHMiXSwibmFtZXMiOltdLCJtYXBwaW5ncyI6IkFBQUEsNEVBQTRFO0FBQzVFLE1BQU0sT0FBTyxTQUFTO0lBRXBCLDRGQUE0RjtJQUNyRixNQUFNLENBQUMsU0FBUyxDQUFDLEtBQVcsRUFBRSxTQUFpQjtRQUNwRCxNQUFNLEdBQUcsR0FBVyxHQUFHLENBQUMsZUFBZSxDQUFDLEtBQUssQ0FBQyxDQUFDO1FBQy9DLE1BQU0sSUFBSSxHQUFzQixRQUFRLENBQUMsYUFBYSxDQUFDLEdBQUcsQ0FBQyxDQUFDO1FBQzVELElBQUksQ0FBQyxJQUFJLEdBQUcsR0FBRyxDQUFDO1FBQ2hCLElBQUksQ0FBQyxRQUFRLEdBQUcsU0FBUyxDQUFDO1FBQzFCLElBQUksQ0FBQyxLQUFLLENBQUMsT0FBTyxHQUFHLE1BQU0sQ0FBQztRQUM1QixRQUFRLENBQUMsSUFBSSxDQUFDLFdBQVcsQ0FBQyxJQUFJLENBQUMsQ0FBQztRQUNoQyxJQUFJLENBQUMsS0FBSyxFQUFFLENBQUM7UUFDYixRQUFRLENBQUMsSUFBSSxDQUFDLFdBQVcsQ0FBQyxJQUFJLENBQUMsQ0FBQztRQUNoQywyRUFBMkU7UUFDM0UsVUFBVSxDQUFDLEdBQUcsRUFBRSxDQUFDLEdBQUcsQ0FBQyxlQUFlLENBQUMsR0FBRyxDQUFDLENBQUMsQ0FBQztJQUM3QyxDQUFDO0lBRUQscUhBQXFIO0lBQzlHLE1BQU0sQ0FBQyw4QkFBOEIsQ0FBQyxNQUFpQztRQUM1RSxJQUFJLENBQUMsTUFBTSxFQUFFO1lBQ1gsT0FBTyxJQUFJLENBQUM7U0FDYjtRQUNELE1BQU0sU0FBUyxHQUFHLDRCQUE0QixDQUFDLElBQUksQ0FBQyxNQUFNLENBQUMsQ0FBQztRQUM1RCxJQUFJLFNBQVMsRUFBRTtZQUNiLE9BQU8sa0JBQWtCLENBQUMsU0FBUyxDQUFDLENBQUMsQ0FBQyxDQUFDLElBQUksRUFBRSxDQUFDLENBQUM7U0FDaEQ7UUFDRCxNQUFNLE9BQU8sR0FBRyx3QkFBd0IsQ0FBQyxJQUFJLENBQUMsTUFBTSxDQUFDLENBQUM7UUFDdEQsT0FBTyxPQUFPLENBQUMsQ0FBQyxDQUFDLE9BQU8sQ0FBQyxDQUFDLENBQUMsQ0FBQyxJQUFJLEVBQUUsQ0FBQyxDQUFDLENBQUMsSUFBSSxDQUFDO0lBQzVDLENBQUM7Q0FDRiIsInNvdXJjZXNDb250ZW50IjpbIi8qKiBEYXRlaWVuIGltIEJyb3dzZXIgc3BlaWNoZXJuIHVuZCBEYXRlaW5hbWVuIGF1cyBIVFRQLUFudHdvcnRlbiBsZXNlbi4gKi9cbmV4cG9ydCBjbGFzcyBEYXRlaVV0aWwge1xuXG4gIC8qKiBTcGVpY2hlcnQgZGllIERhdGVpIGltIERvd25sb2FkLU9yZG5lciBkZXMgQmVudXR6ZXJzICh1ZWJlciBlaW5lbiB1bnNpY2h0YmFyZW4gTGluaykuICovXG4gIHB1YmxpYyBzdGF0aWMgc3BlaWNoZXJuKGRhdGVpOiBCbG9iLCBkYXRlaW5hbWU6IHN0cmluZyk6IHZvaWQge1xuICAgIGNvbnN0IHVybDogc3RyaW5nID0gVVJMLmNyZWF0ZU9iamVjdFVSTChkYXRlaSk7XG4gICAgY29uc3QgbGluazogSFRNTEFuY2hvckVsZW1lbnQgPSBkb2N1bWVudC5jcmVhdGVFbGVtZW50KCdhJyk7XG4gICAgbGluay5ocmVmID0gdXJsO1xuICAgIGxpbmsuZG93bmxvYWQgPSBkYXRlaW5hbWU7XG4gICAgbGluay5zdHlsZS5kaXNwbGF5ID0gJ25vbmUnO1xuICAgIGRvY3VtZW50LmJvZHkuYXBwZW5kQ2hpbGQobGluayk7XG4gICAgbGluay5jbGljaygpO1xuICAgIGRvY3VtZW50LmJvZHkucmVtb3ZlQ2hpbGQobGluayk7XG4gICAgLy8gRXJzdCBuYWNoIGRlbSBTdGFydCBkZXMgRG93bmxvYWRzIGZyZWlnZWJlbiwgc29uc3QgYnJpY2h0IEZpcmVmb3ggaWhuIGFiXG4gICAgc2V0VGltZW91dCgoKSA9PiBVUkwucmV2b2tlT2JqZWN0VVJMKHVybCkpO1xuICB9XG5cbiAgLyoqIERhdGVpbmFtZSBhdXMgZGVtIEhlYWRlciBgQ29udGVudC1EaXNwb3NpdGlvbmA7IFJGQyA1OTg3IChgZmlsZW5hbWUqPVVURi04JycuLi5gKSBoYXQgVm9ycmFuZyB2b3IgYGZpbGVuYW1lPWAuICovXG4gIHB1YmxpYyBzdGF0aWMgZGF0ZWluYW1lQXVzQ29udGVudERpc3Bvc2l0aW9uKGhlYWRlcjogc3RyaW5nIHwgbnVsbCB8IHVuZGVmaW5lZCk6IHN0cmluZyB8IG51bGwge1xuICAgIGlmICghaGVhZGVyKSB7XG4gICAgICByZXR1cm4gbnVsbDtcbiAgICB9XG4gICAgY29uc3QgZXJ3ZWl0ZXJ0ID0gL2ZpbGVuYW1lXFwqPVVURi04JycoW147XSspL2kuZXhlYyhoZWFkZXIpO1xuICAgIGlmIChlcndlaXRlcnQpIHtcbiAgICAgIHJldHVybiBkZWNvZGVVUklDb21wb25lbnQoZXJ3ZWl0ZXJ0WzFdLnRyaW0oKSk7XG4gICAgfVxuICAgIGNvbnN0IGVpbmZhY2ggPSAvZmlsZW5hbWU9XCI/KFteXCI7XSspXCI/L2kuZXhlYyhoZWFkZXIpO1xuICAgIHJldHVybiBlaW5mYWNoID8gZWluZmFjaFsxXS50cmltKCkgOiBudWxsO1xuICB9XG59XG4iXX0=

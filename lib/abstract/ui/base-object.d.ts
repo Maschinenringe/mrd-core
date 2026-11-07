@@ -9,6 +9,13 @@ export declare abstract class BaseObject implements OnDestroy {
     protected $unsubscribe: Subject<void>;
     /** Funktion zur dauerhaften Überwachung von Subscriptions. Speicher wird bei Zerstörung der Komponente freigegeben. */
     protected watch<T>(observable: Observable<T>, handler: ISubscriptionHandler): Subscription;
+    /**
+     * Wie `watch`, ruft aber `onSuccess` des Handlers zusaetzlich einmal sofort auf (ohne Wert), z. B. um einen Zustand
+     * gleich zu berechnen und danach bei jeder Änderung neu: `this.watchAndTrigger(selektor.data.changed, handler)`.
+     * Der sofortige Aufruf kommt vor dem Abonnieren; ein Observable, das selbst sofort einen Wert liefert, loest den
+     * Handler deshalb ein zweites Mal aus.
+     */
+    protected watchAndTrigger<T>(observable: Observable<T>, handler: ISubscriptionHandler): Subscription;
     /** Proxy für SubscriptionManager.subscribe */
     protected subscribe<T>(observable: Observable<T>, handler: ISubscriptionHandler): Subscription;
     /** Proxy für SubscriptionManager.subscribeAs */

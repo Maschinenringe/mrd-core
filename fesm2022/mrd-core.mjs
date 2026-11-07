@@ -1,10 +1,11 @@
 import * as i0 from '@angular/core';
 import { Directive, Injector, inject, EnvironmentInjector, runInInjectionContext, Input, Pipe, NgModule, InjectionToken, Inject } from '@angular/core';
 import { take, finalize, takeUntil, tap, switchMap, catchError } from 'rxjs/operators';
-import { Subject, of, Observable, forkJoin, isObservable, from } from 'rxjs';
+import { Subject, of, Observable, forkJoin, isObservable, from, merge } from 'rxjs';
 import _ from 'underscore';
-import { FormArray, FormControl, FormGroup } from '@angular/forms';
 import moment from 'moment';
+import { FormArray, FormControl, FormGroup } from '@angular/forms';
+import { HttpParams } from '@angular/common/http';
 
 /** Diese Klasse kümmert sich um die Speicherverwaltung von Subscriptions.
  Diese erzeugen Memory-Leaks, wenn sie nicht sauber gelöscht werden. */
@@ -94,6 +95,18 @@ class BaseObject {
                 handler.onError(...args);
             }
         });
+    }
+    /**
+     * Wie `watch`, ruft aber `onSuccess` des Handlers zusaetzlich einmal sofort auf (ohne Wert), z. B. um einen Zustand
+     * gleich zu berechnen und danach bei jeder Änderung neu: `this.watchAndTrigger(selektor.data.changed, handler)`.
+     * Der sofortige Aufruf kommt vor dem Abonnieren; ein Observable, das selbst sofort einen Wert liefert, loest den
+     * Handler deshalb ein zweites Mal aus.
+     */
+    watchAndTrigger(observable, handler) {
+        if (handler.onSuccess) {
+            handler.onSuccess();
+        }
+        return this.watch(observable, handler);
     }
     /** Proxy für SubscriptionManager.subscribe */
     subscribe(observable, handler) {
@@ -947,32 +960,6 @@ class BaseRootComponent extends BasePushStrategyObject {
         type: Directive
     }], null, null); })();
 
-class AbstractEntityResolver {
-    router;
-    routeConfiguration;
-    configuration;
-    constructor(router, routeConfiguration, configuration) {
-        this.router = router;
-        this.routeConfiguration = routeConfiguration;
-        this.configuration = configuration;
-        this.configuration = configuration || AbstractEntityResolver.generateDefaultConfiguration();
-    }
-    runResolver(activatedRoute, params) {
-        const currentRouteParams = _.extend(_.clone(activatedRoute.snapshot.params), params);
-        if (this.configuration.keepQueryParams) {
-            return this.router.navigate(this.routeConfiguration.buildNavigation(currentRouteParams), { queryParams: activatedRoute.snapshot.queryParams });
-        }
-        else {
-            return this.router.navigate(this.routeConfiguration.buildNavigation(currentRouteParams));
-        }
-    }
-    static generateDefaultConfiguration() {
-        return {
-            keepQueryParams: false
-        };
-    }
-}
-
 class ValidatorRequired {
     hasError = false;
     error = 'Pflichtfeld';
@@ -1027,6 +1014,164 @@ class ValidatorRequired {
             this.hasError = false;
             return null;
         }
+    }
+}
+
+/**
+ * Diese Klasse kann verwendet werden um Werte zu speichern und die automatisch
+ * überwachbar zu machen. Dadurch können UI Push Strategien leichter implementiert werden.
+ */
+class ObservableValue {
+    equals;
+    value$;
+    changed = new Subject();
+    constructor(initialValue, equals) {
+        this.equals = equals;
+        this.value$ = initialValue;
+        this.equals = Util.isDefined(this.equals) ? this.equals : this.defaultComparator;
+    }
+    set value(value) {
+        if (!this.equals(this.value$, value)) {
+            this.value$ = value;
+            this.changed.next(value);
+        }
+    }
+    get value() {
+        return this.value$;
+    }
+    defaultComparator(current, next) {
+        return current === next;
+    }
+}
+
+/**
+ * Entscheidet, fuer welche Betriebe ein Bereich arbeitet: die vom Host uebergebenen oder sonst der Betrieb des
+ * Kopfzeilen-Selektors. Komponenten, Services und Resolver lesen den Betrieb nur hierueber, nie direkt am Selektor.
+ *
+ * Jedes Submodul leitet einen eigenen Service ab und reicht seine Ports durch:
+ * ```ts
+ * @Injectable({ providedIn: 'root' })
+ * export class StammdatenBetriebskontextService extends AbstractBetriebskontext<StammdatenBetrieb> {
+ *   constructor(@Inject(STAMMDATEN_BETRIEB_SELECTOR) selektor: IEntitySelector<StammdatenBetrieb>,
+ *               @Optional() @Inject(STAMMDATEN_BETRIEBE) uebergeben: ObservableValue<StammdatenBetrieb[] | null> | null) {
+ *     super(selektor, uebergeben);
+ *   }
+ * }
+ * ```
+ */
+class AbstractBetriebskontext extends BaseObject {
+    betriebSelector;
+    uebergebeneBetriebe;
+    gewechselt$ = new Subject();
+    /** Meldet nur Wechsel der wirksamen Betriebe; ein Selektorwechsel bei uebergebenen Betrieben bleibt still. */
+    gewechselt = this.gewechselt$.asObservable();
+    letzteIds;
+    optionen = [];
+    /**
+     * @param betriebSelector Betrieb der Kopfzeile
+     * @param uebergebeneBetriebe vom Host uebergebene Betriebe; `null`, leer oder ungebunden: es gilt der Selektor
+     */
+    constructor(betriebSelector, uebergebeneBetriebe) {
+        super();
+        this.betriebSelector = betriebSelector;
+        this.uebergebeneBetriebe = uebergebeneBetriebe;
+        this.letzteIds = this.idsBetriebe;
+        this.optionenBerechnen();
+        const quellen = Util.isDefined(this.uebergebeneBetriebe)
+            ? [this.betriebSelector.data.changed, this.uebergebeneBetriebe.changed]
+            : [this.betriebSelector.data.changed];
+        this.watch(merge(...quellen), new SubscriptionHandler(() => this.pruefeWechsel()));
+    }
+    /** `true`, wenn der Host Betriebe uebergeben hat; sonst gilt der Selektor. */
+    get explizit() {
+        return Util.isDefined(this.uebergebeneBetriebe) && !_.isEmpty(this.uebergebeneBetriebe.value);
+    }
+    get betriebe() {
+        if (this.explizit) {
+            return this.uebergebeneBetriebe.value;
+        }
+        const betrieb = this.betriebSelector.data.value;
+        return Util.isDefined(betrieb) ? [betrieb] : [];
+    }
+    /** Der einzige bzw. erste der uebergebenen Betriebe */
+    get betrieb() {
+        return _.first(this.betriebe);
+    }
+    get idBetrieb() {
+        return this.betrieb?.id;
+    }
+    get idsBetriebe() {
+        return this.betriebe.map((betrieb) => betrieb.id);
+    }
+    get mehrereBetriebe() {
+        return this.betriebe.length > 1;
+    }
+    /**
+     * Betriebe fuer die Seiten-Resolver: ohne Uebergabe zaehlt der Betrieb der Route, weil der Selektor
+     * parallel dazu erst aus der Route aufgeloest wird und hier noch den vorherigen Betrieb haben kann.
+     */
+    idsBetriebeOder(idAusRoute) {
+        return this.explizit ? this.idsBetriebe : [idAusRoute];
+    }
+    /** Stabile Liste fuer Auswahlfelder und Listen-Filter; aendert sich nur mit den wirksamen Betrieben. */
+    get betriebOptionen() {
+        return this.optionen;
+    }
+    /**
+     * Betriebsfeld eines Formulars: neue Eintraege bekommen den einzigen Betrieb, bei mehreren den vorbelegten
+     * (z. B. aus dem Betriebsfilter einer Liste) oder die Auswahl ist Pflicht; bestehende behalten ihren Betrieb.
+     */
+    betriebFeldVorbereiten(feld, neu, vorbelegt) {
+        if (neu) {
+            const vorbelegterBetrieb = Util.isDefined(vorbelegt) && this.idsBetriebe.includes(vorbelegt) ? vorbelegt : null;
+            feld.setValue(this.mehrereBetriebe ? vorbelegterBetrieb : this.idBetrieb, true);
+        }
+        feld.validateWith(neu && this.mehrereBetriebe ? [new ValidatorRequired()] : []);
+    }
+    pruefeWechsel() {
+        const ids = this.idsBetriebe;
+        if (!_.isEqual(ids, this.letzteIds)) {
+            this.letzteIds = ids;
+            this.optionenBerechnen();
+            this.gewechselt$.next(this.betriebe);
+        }
+    }
+    optionenBerechnen() {
+        this.optionen = this.betriebe.map((betrieb) => ({
+            id: betrieb.id,
+            name: betrieb.hofname || `Betrieb ${betrieb.id}`
+        }));
+    }
+    /** @nocollapse */ static ɵfac = function AbstractBetriebskontext_Factory(t) { i0.ɵɵinvalidFactory(); };
+    /** @nocollapse */ static ɵdir = /** @pureOrBreakMyCode */ i0.ɵɵdefineDirective({ type: AbstractBetriebskontext, features: [i0.ɵɵInheritDefinitionFeature] });
+}
+(function () { (typeof ngDevMode === "undefined" || ngDevMode) && i0.ɵsetClassMetadata(AbstractBetriebskontext, [{
+        type: Directive
+    }], function () { return [{ type: undefined }, { type: ObservableValue }]; }, null); })();
+
+class AbstractEntityResolver {
+    router;
+    routeConfiguration;
+    configuration;
+    constructor(router, routeConfiguration, configuration) {
+        this.router = router;
+        this.routeConfiguration = routeConfiguration;
+        this.configuration = configuration;
+        this.configuration = configuration || AbstractEntityResolver.generateDefaultConfiguration();
+    }
+    runResolver(activatedRoute, params) {
+        const currentRouteParams = _.extend(_.clone(activatedRoute.snapshot.params), params);
+        if (this.configuration.keepQueryParams) {
+            return this.router.navigate(this.routeConfiguration.buildNavigation(currentRouteParams), { queryParams: activatedRoute.snapshot.queryParams });
+        }
+        else {
+            return this.router.navigate(this.routeConfiguration.buildNavigation(currentRouteParams));
+        }
+    }
+    static generateDefaultConfiguration() {
+        return {
+            keepQueryParams: false
+        };
     }
 }
 
@@ -1572,6 +1717,128 @@ const REGEX = {
     DATE: /^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/
 };
 
+/**
+ * Baut OData-Abfragen (`$filter`, `$orderby`, `$top`) fuer REST-Services.
+ *
+ * ```ts
+ * ODataConfigBuilder.build()
+ *   .filter('idErntejahr', [12, 13])
+ *   .filterArray('aufgaben.idSchlag', idSchlag)
+ *   .orderBy('datum', true)
+ *   .toHttpParams();
+ * ```
+ */
+class ODataConfigBuilder {
+    static build() {
+        return new ODataConfigClass();
+    }
+}
+class ODataConfigClass {
+    filters = new Map();
+    orderBys = new Map();
+    topCount;
+    /**
+     * @param orFilter der naechste Filter wird mit `or` statt `and` angehaengt
+     */
+    filter(field, condition, comparator = ODataComparator.EQUALS, orFilter = false) {
+        this.filters.set(field, { condition: this.getOdataCondition(condition, comparator), orFilter });
+        return this;
+    }
+    orderBy(field, desc = false) {
+        this.orderBys.set(field, { direction: desc ? 'desc' : 'asc' });
+        return this;
+    }
+    top(count) {
+        this.topCount = count;
+        return this;
+    }
+    /** Filter auf ein Feld der Elemente einer Liste, z. B. `aufgaben.idSchlag` -> `aufgaben/any(x: x/idSchlag eq ...)` */
+    filterArray(field, condition, anyOrAll = 'any', comparator = ODataComparator.EQUALS) {
+        const fields = field.split('.');
+        this.filters.set(fields[0], { condition: this.getOdataArrayCondition(field, condition, anyOrAll, comparator) });
+        return this;
+    }
+    toString() {
+        const teile = [];
+        if (this.filters.size > 0) {
+            teile.push(`$filter=${this.generateFilterString(this.filters)}`);
+        }
+        if (this.orderBys.size > 0) {
+            teile.push(`$orderby=${this.generateOrderByString(this.orderBys)}`);
+        }
+        if (this.topCount) {
+            teile.push(`$top=${this.topCount}`);
+        }
+        return teile.length > 0 ? `?${teile.join('&')}` : '';
+    }
+    toHttpParams() {
+        let params = new HttpParams();
+        if (this.filters.size > 0) {
+            params = params.append('$filter', this.generateFilterString(this.filters));
+        }
+        if (this.orderBys.size > 0) {
+            params = params.append('$orderby', this.generateOrderByString(this.orderBys));
+        }
+        if (this.topCount) {
+            params = params.append('$top', this.topCount.toString());
+        }
+        return params;
+    }
+    toParamObject() {
+        const params = {};
+        if (this.filters.size > 0) {
+            params['$filter'] = this.generateFilterString(this.filters);
+        }
+        if (this.orderBys.size > 0) {
+            params['$orderby'] = this.generateOrderByString(this.orderBys);
+        }
+        if (this.topCount) {
+            params['$top'] = this.topCount;
+        }
+        return params;
+    }
+    getOdataArrayCondition(field, condition, anyOrAll, comparator) {
+        const conditionField = field.split('.').pop();
+        return `/${anyOrAll}(x: x/${conditionField} ${this.getOdataCondition(condition, comparator)})`;
+    }
+    getOdataCondition(condition, comparator) {
+        if (Array.isArray(condition)) {
+            const werte = condition;
+            return `in (${werte.map((wert) => typeof wert === 'string' ? `'${wert}'` : wert).join(',')})`;
+        }
+        return typeof condition === 'string' ? `${comparator} '${condition}'` : `${comparator} ${condition}`;
+    }
+    generateFilterString(filterConfig) {
+        let filterString = '';
+        let prevOrFilter = false;
+        let orFilterCount = 0;
+        filterConfig.forEach((filter, field) => {
+            if (filterString.length > 0) {
+                filterString += prevOrFilter ? ' or (' : ' and ';
+            }
+            filterString += `${field} ${filter.condition}`;
+            prevOrFilter = !!filter.orFilter;
+            orFilterCount += filter.orFilter ? 1 : 0;
+        });
+        if (filterConfig.size > 1 && orFilterCount > 0) {
+            filterString += ')'.repeat(orFilterCount);
+        }
+        return filterString;
+    }
+    generateOrderByString(orderByConfig) {
+        const teile = [];
+        orderByConfig.forEach((orderBy, field) => teile.push(`${field} ${orderBy.direction}`));
+        return teile.join(', ');
+    }
+}
+var ODataComparator;
+(function (ODataComparator) {
+    ODataComparator["EQUALS"] = "eq";
+    ODataComparator["NOT_EQUALS"] = "ne";
+    ODataComparator["GREATER"] = "gt";
+    ODataComparator["LESS"] = "lt";
+})(ODataComparator || (ODataComparator = {}));
+
 /** Gemeinsame Formatierung fuer Direktive und Pipe: DD.MM.YYYY bzw. DD.MM.YYYY HH:mm, sonst leer */
 function deutschesDatum(wert, mitZeit = false) {
     if (!Util.isDefined(wert) || wert === '') {
@@ -1979,6 +2246,71 @@ class RoleGuardModule {
     }], null, null); })();
 (function () { (typeof ngJitMode === "undefined" || ngJitMode) && i0.ɵɵsetNgModuleScope(RoleGuardModule, { declarations: [RoleGuardDirective], exports: [RoleGuardDirective] }); })();
 
+/**
+ * Betriebe, fuer die ein Service gerade geladen hat. Gelesen wird ueber alle (z. B. `/multi-betriebe/1,2,3/...`),
+ * geschrieben immer nur fuer einen Betrieb.
+ */
+class Betriebsauswahl {
+    ids = [];
+    get idsBetriebe() {
+        return this.ids;
+    }
+    /** Liefert `true`, wenn sich die Betriebe geaendert haben und der Store deshalb geleert werden muss. */
+    setzen(idsBetriebe) {
+        const neueIds = _.uniq(idsBetriebe.filter((id) => Util.isDefined(id))).sort((a, b) => a - b);
+        if (_.isEqual(neueIds, this.ids)) {
+            return false;
+        }
+        this.ids = neueIds;
+        return true;
+    }
+    enthaelt(idBetrieb) {
+        return Util.isDefined(idBetrieb) && this.ids.includes(idBetrieb);
+    }
+    /**
+     * Betrieb fuer Schreibzugriffe: der des Eintrags; betriebsuebergreifende Eintraege (ohne Betrieb, z. B.
+     * Standardsorten oder -duenger) gehen an den Betrieb, wenn genau einer gewaehlt ist.
+     */
+    betriebZumSchreiben(idBetriebDesEintrags) {
+        if (Util.isDefined(idBetriebDesEintrags)) {
+            return idBetriebDesEintrags;
+        }
+        if (this.ids.length === 1) {
+            return this.ids[0];
+        }
+        throw new Error(`Schreibzugriff ohne eindeutigen Betrieb (gewaehlt: ${this.ids.join(',')})`);
+    }
+}
+
+/** Dateien im Browser speichern und Dateinamen aus HTTP-Antworten lesen. */
+class DateiUtil {
+    /** Speichert die Datei im Download-Ordner des Benutzers (ueber einen unsichtbaren Link). */
+    static speichern(datei, dateiname) {
+        const url = URL.createObjectURL(datei);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = dateiname;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        // Erst nach dem Start des Downloads freigeben, sonst bricht Firefox ihn ab
+        setTimeout(() => URL.revokeObjectURL(url));
+    }
+    /** Dateiname aus dem Header `Content-Disposition`; RFC 5987 (`filename*=UTF-8''...`) hat Vorrang vor `filename=`. */
+    static dateinameAusContentDisposition(header) {
+        if (!header) {
+            return null;
+        }
+        const erweitert = /filename\*=UTF-8''([^;]+)/i.exec(header);
+        if (erweitert) {
+            return decodeURIComponent(erweitert[1].trim());
+        }
+        const einfach = /filename="?([^";]+)"?/i.exec(header);
+        return einfach ? einfach[1].trim() : null;
+    }
+}
+
 class DeactivationHandler {
     deactivators$ = {};
     register(name, component) {
@@ -2009,6 +2341,56 @@ class DeactivationHandler {
                 }
             }));
         }
+    }
+}
+
+/**
+ * Sortierung von Feldstuecknummern (und aehnlichen Kennungen aus Zahlen und Text) wie die Universalapp
+ * (FeldstuecknummerComparer).
+ *
+ * `schlaege.sort((a, b) => FeldstuecknummerUtil.compare(a.feldstuecknummer, b.feldstuecknummer))`
+ */
+class FeldstuecknummerUtil {
+    /**
+     * Numerisch (auch mit Komma als Dezimaltrennzeichen), leere Werte ans Ende, nicht-numerische hinter numerischen,
+     * sonst Textvergleich ohne Gross-/Kleinschreibung.
+     */
+    static compare(a, b) {
+        const aLeer = !Util.isDefined(a) || a === '';
+        const bLeer = !Util.isDefined(b) || b === '';
+        if (aLeer && bLeer) {
+            return 0;
+        }
+        if (aLeer) {
+            return 1;
+        }
+        if (bLeer) {
+            return -1;
+        }
+        const aZahl = FeldstuecknummerUtil.alsZahl(a);
+        const bZahl = FeldstuecknummerUtil.alsZahl(b);
+        if (aZahl !== null && bZahl !== null) {
+            return aZahl - bZahl;
+        }
+        if (aZahl !== null) {
+            return -1;
+        }
+        if (bZahl !== null) {
+            return 1;
+        }
+        const aKlein = a.toLocaleLowerCase();
+        const bKlein = b.toLocaleLowerCase();
+        return aKlein > bKlein ? 1 : aKlein < bKlein ? -1 : 0;
+    }
+    /** Sortiert eine Kopie der Liste nach der Feldstuecknummer, die `wert` liefert. */
+    static sortieren(liste, wert, absteigend = false) {
+        const sortiert = [...liste].sort((a, b) => FeldstuecknummerUtil.compare(wert(a), wert(b)));
+        return absteigend ? sortiert.reverse() : sortiert;
+    }
+    /** Feldstuecknummern mit Komma als Dezimaltrennzeichen (z. B. "3,10") werden ebenfalls numerisch behandelt */
+    static alsZahl(feldstuecknummer) {
+        const zahl = Number(feldstuecknummer.trim().replace(',', '.'));
+        return !Number.isNaN(zahl) ? zahl : null;
     }
 }
 
@@ -2150,33 +2532,6 @@ class ItemStore {
     }
 }
 
-/**
- * Diese Klasse kann verwendet werden um Werte zu speichern und die automatisch
- * überwachbar zu machen. Dadurch können UI Push Strategien leichter implementiert werden.
- */
-class ObservableValue {
-    equals;
-    value$;
-    changed = new Subject();
-    constructor(initialValue, equals) {
-        this.equals = equals;
-        this.value$ = initialValue;
-        this.equals = Util.isDefined(this.equals) ? this.equals : this.defaultComparator;
-    }
-    set value(value) {
-        if (!this.equals(this.value$, value)) {
-            this.value$ = value;
-            this.changed.next(value);
-        }
-    }
-    get value() {
-        return this.value$;
-    }
-    defaultComparator(current, next) {
-        return current === next;
-    }
-}
-
 class TimestampItemStore extends ItemStore {
     itemLifetimeInSeconds;
     static ITEM_TIMESTAMP_KEY = '__timestamp__';
@@ -2228,6 +2583,52 @@ class TimestampItemStore extends ItemStore {
     }
     trackItem(item) {
         item[TimestampItemStore.ITEM_TIMESTAMP_KEY] = Util.getCurrentUnixTimestamp();
+    }
+}
+
+/** Zahlen und Dateigroessen fuer Anzeigetexte im deutschen Format (Dezimalkomma, Tausenderpunkt). */
+class ZahlenformatUtil {
+    static KILO = 1024;
+    static EINHEITEN = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+    static EINHEIT_MB = 2;
+    /** Rundet auf genau `nachkommastellen` Stellen und setzt Tausenderpunkte: `1234.5` mit 2 -> `1.234,50` */
+    static mitNachkommastellen(zahl, nachkommastellen) {
+        return Number(zahl.toFixed(nachkommastellen)).toLocaleString('de-DE', {
+            minimumFractionDigits: nachkommastellen,
+            maximumFractionDigits: nachkommastellen
+        });
+    }
+    /** Groesse in der passenden Einheit, z. B. `1536` -> `1,5 KB`; ohne Wert `null` */
+    static dateigroesse(groesseInByte, nachkommastellen = 0) {
+        return ZahlenformatUtil.mitEinheit(groesseInByte, nachkommastellen, 0);
+    }
+    /** Wie `dateigroesse`, fuer eine Angabe in MB (z. B. Speicherplatz): `2048` -> `2 GB` */
+    static dateigroesseAusMB(groesseInMB, nachkommastellen = 0) {
+        return ZahlenformatUtil.mitEinheit(groesseInMB, nachkommastellen, ZahlenformatUtil.EINHEIT_MB);
+    }
+    static byteInMB(groesseInByte) {
+        return Util.isDefined(groesseInByte) ? groesseInByte / Math.pow(ZahlenformatUtil.KILO, ZahlenformatUtil.EINHEIT_MB) : null;
+    }
+    static mbInByte(mb) {
+        return mb * Math.pow(ZahlenformatUtil.KILO, ZahlenformatUtil.EINHEIT_MB);
+    }
+    /** Bytes einer Einheit (`'KB'` -> 1024); wirft bei unbekannter Einheit */
+    static byteJeEinheit(einheit) {
+        const index = ZahlenformatUtil.EINHEITEN.indexOf(einheit);
+        if (index < 0) {
+            throw new Error(`Unbekannte Einheit: ${einheit}`);
+        }
+        return Math.pow(ZahlenformatUtil.KILO, index);
+    }
+    static mitEinheit(groesse, nachkommastellen, ersteEinheit) {
+        if (!Util.isDefined(groesse)) {
+            return null;
+        }
+        const stufe = groesse > 0
+            ? Math.min(Math.floor(Math.log(groesse) / Math.log(ZahlenformatUtil.KILO)), ZahlenformatUtil.EINHEITEN.length - 1 - ersteEinheit)
+            : 0;
+        const wert = groesse / Math.pow(ZahlenformatUtil.KILO, stufe);
+        return `${ZahlenformatUtil.mitNachkommastellen(wert, nachkommastellen)} ${ZahlenformatUtil.EINHEITEN[ersteEinheit + stufe]}`;
     }
 }
 
@@ -2967,5 +3368,5 @@ class ValidatorTime {
  * Generated bundle index. Do not edit.
  */
 
-export { AbstractActivationGuard, AbstractActivationQueuedGuard, AbstractCachedRestservice, AbstractEntityResolver, AbstractReadonlyCachedRestservice, AbstractReadonlyRestservice, AbstractResolver, AbstractRestservice, AbstractRouteConfiguration, AbstractStoredReadonlyRestservice, AbstractStoredRestservice, AccessableControlFactory, AccessableFormArray, AccessableFormControl, AccessableFormGroup, BUNDESLAND_IDS, BaseObject, BasePushStrategyObject, BaseRootComponent, DeactivationHandler, DeutschesDatumPipe, GermanDateTimeDirective, GermanDateTimeModule, GermanFloatDirective, GermanFloatModule, HttpStatusCodes, ItemStore, LokalerSpeicher, ObservableValue, REGEX, ROLE_GUARD, ReadonlyRestHandler, RestHandler, RoleGuardDirective, RoleGuardModule, SubscriptionHandler, SubscriptionManager, TimestampItemStore, Type, TypeConverter, Util, ValidatorBetriebsnummer, ValidatorCustom, ValidatorDate, ValidatorDateRange, ValidatorEmail, ValidatorFixedValue, ValidatorFloat, ValidatorInteger, ValidatorIntegerRange, ValidatorLength, ValidatorListLength, ValidatorMaxDate, ValidatorMinValue, ValidatorPostalCode, ValidatorRequired, ValidatorTime, deactivateGuard, deutschesDatum };
+export { AbstractActivationGuard, AbstractActivationQueuedGuard, AbstractBetriebskontext, AbstractCachedRestservice, AbstractEntityResolver, AbstractReadonlyCachedRestservice, AbstractReadonlyRestservice, AbstractResolver, AbstractRestservice, AbstractRouteConfiguration, AbstractStoredReadonlyRestservice, AbstractStoredRestservice, AccessableControlFactory, AccessableFormArray, AccessableFormControl, AccessableFormGroup, BUNDESLAND_IDS, BaseObject, BasePushStrategyObject, BaseRootComponent, Betriebsauswahl, DateiUtil, DeactivationHandler, DeutschesDatumPipe, FeldstuecknummerUtil, GermanDateTimeDirective, GermanDateTimeModule, GermanFloatDirective, GermanFloatModule, HttpStatusCodes, ItemStore, LokalerSpeicher, ODataComparator, ODataConfigBuilder, ODataConfigClass, ObservableValue, REGEX, ROLE_GUARD, ReadonlyRestHandler, RestHandler, RoleGuardDirective, RoleGuardModule, SubscriptionHandler, SubscriptionManager, TimestampItemStore, Type, TypeConverter, Util, ValidatorBetriebsnummer, ValidatorCustom, ValidatorDate, ValidatorDateRange, ValidatorEmail, ValidatorFixedValue, ValidatorFloat, ValidatorInteger, ValidatorIntegerRange, ValidatorLength, ValidatorListLength, ValidatorMaxDate, ValidatorMinValue, ValidatorPostalCode, ValidatorRequired, ValidatorTime, ZahlenformatUtil, deactivateGuard, deutschesDatum };
 //# sourceMappingURL=mrd-core.mjs.map
