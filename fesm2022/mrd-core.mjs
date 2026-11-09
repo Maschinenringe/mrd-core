@@ -1,8 +1,9 @@
 import * as i0 from '@angular/core';
 import { Directive, Injector, inject, EnvironmentInjector, runInInjectionContext, Input, Pipe, NgModule, InjectionToken, Inject } from '@angular/core';
-import { take, finalize, takeUntil, tap, switchMap, catchError } from 'rxjs/operators';
-import { Subject, of, Observable, forkJoin, isObservable, from, merge } from 'rxjs';
+import { take, finalize, takeUntil, tap, switchMap, catchError, defaultIfEmpty } from 'rxjs/operators';
+import { Subject, defer, of, forkJoin, isObservable, from, merge, Observable } from 'rxjs';
 import _ from 'underscore';
+import { UrlTree } from '@angular/router';
 import moment from 'moment';
 import { FormArray, FormControl, FormGroup } from '@angular/forms';
 import { HttpParams } from '@angular/common/http';
@@ -193,6 +194,7 @@ class Util {
         }
         return returnTheValueIfDefined ? obj : true;
     }
+    /** Haengt Abfrage-Parameter unkodiert an die URL; Freitextwerte muss der Aufrufer selbst mit encodeURIComponent kodieren. */
     static armUrlWithSearchParams(url, queryParams) {
         if (!queryParams || _.isEmpty(queryParams)) {
             return url;
@@ -240,19 +242,21 @@ class Util {
     }
     static transformUmlaute(value) {
         return value
-            .replace('Ä', 'Ae')
-            .replace('ä', 'ae')
-            .replace('Ö', 'Oe')
-            .replace('ö', 'oe')
-            .replace('Ü', 'Ue')
-            .replace('ü', 'ue');
+            .replace(/Ä/g, 'Ae')
+            .replace(/ä/g, 'ae')
+            .replace(/Ö/g, 'Oe')
+            .replace(/ö/g, 'oe')
+            .replace(/Ü/g, 'Ue')
+            .replace(/ü/g, 'ue')
+            .replace(/ß/g, 'ss');
     }
+    /** Sortiert nach einem Text-Attribut ohne Gross-/Kleinschreibung, Umlaute wie ae/oe/ue/ss; fehlende Werte zuerst. */
     static sortAlpabetically(list, attribute) {
-        const resultList = _.sortBy(list, (item) => this.transformUmlaute(item[attribute]).toUpperCase());
-        return resultList;
+        return _.sortBy(list, (item) => this.transformUmlaute(String(item[attribute] ?? '')).toUpperCase());
     }
 }
 
+/** Fuehrt die Lesezugriffe eines REST-Services aus; die `isFetching...`-Flags gelten vom Abonnieren bis zum Ende des Requests. */
 class ReadonlyRestHandler {
     http;
     url;
@@ -264,22 +268,16 @@ class ReadonlyRestHandler {
         this.observer = observer;
     }
     all(searchParams, httpOptions) {
-        this.observer.isFetchingItems = true;
-        return this.http.get(Util.armUrlWithSearchParams(this.url, searchParams), httpOptions)
-            .pipe(tap((result) => {
-            this.observer.onItemsFetched.next(result);
-        }), finalize(() => {
-            this.observer.isFetchingItems = false;
-        }));
+        return defer(() => {
+            this.observer.isFetchingItems = true;
+            return this.http.get(Util.armUrlWithSearchParams(this.url, searchParams), httpOptions);
+        }).pipe(tap((result) => this.observer.onItemsFetched.next(result)), finalize(() => this.observer.isFetchingItems = false));
     }
     show(id, getParams, httpOptions) {
-        this.observer.isFetchingItem = true;
-        return this.http.get(Util.armUrlWithSearchParams(Util.createEntityUrl(this.url, id), getParams), httpOptions)
-            .pipe(tap((result) => {
-            this.observer.onItemFetched.next(result);
-        }), finalize(() => {
-            this.observer.isFetchingItem = false;
-        }));
+        return defer(() => {
+            this.observer.isFetchingItem = true;
+            return this.http.get(Util.armUrlWithSearchParams(Util.createEntityUrl(this.url, id), getParams), httpOptions);
+        }).pipe(tap((result) => this.observer.onItemFetched.next(result)), finalize(() => this.observer.isFetchingItem = false));
     }
 }
 
@@ -376,6 +374,7 @@ class AbstractReadonlyCachedRestservice extends AbstractStoredReadonlyRestservic
 class RestServiceObserver extends ReadonlyRestServiceObserver {
     onItemCreated = new Subject();
     onItemUpdated = new Subject();
+    /** Liefert die Id des geloeschten Eintrags, nicht den Eintrag */
     onItemDestroyed = new Subject();
     onItemPartialUpdated = new Subject();
     onItemSaved = new Subject();
@@ -390,6 +389,7 @@ class RestServiceObserver extends ReadonlyRestServiceObserver {
         this.isUpdatingItem$ = false;
         this.isDestoyingItem$ = false;
         this.isPartiallyUpdatingItem$ = false;
+        this.isSavingItem$ = false;
     }
     isActivate() {
         return super.isActivate() &&
@@ -431,6 +431,10 @@ class RestServiceObserver extends ReadonlyRestServiceObserver {
     }
 }
 
+/**
+ * Fuehrt die Schreibzugriffe eines REST-Services aus und meldet sie am Observer. Die `is...`-Flags gelten erst ab dem
+ * Abonnieren (ein nie abonnierter Aufruf laesst sie unveraendert) und bis zum Ende des Requests.
+ */
 class RestHandler {
     http;
     url;
@@ -443,69 +447,46 @@ class RestHandler {
         this.identifier = identifier;
     }
     create(model, getParams, httpOptions) {
-        this.observer.isCreatingItem = true;
-        return this.http.post(Util.armUrlWithSearchParams(this.url, getParams), model, httpOptions)
-            .pipe(tap((result) => {
-            this.observer.onItemCreated.next(result);
-        }), finalize(() => {
-            this.observer.isCreatingItem = false;
-        }));
+        return defer(() => {
+            this.observer.isCreatingItem = true;
+            return this.http.post(Util.armUrlWithSearchParams(this.url, getParams), model, httpOptions);
+        }).pipe(tap((result) => this.observer.onItemCreated.next(result)), finalize(() => this.observer.isCreatingItem = false));
     }
     destroy(id, getParams, httpOptions) {
-        this.observer.isDestoyingItem = true;
-        return this.http.delete(Util.armUrlWithSearchParams(Util.createEntityUrl(this.url, id), getParams), httpOptions).pipe(tap(() => {
-            this.observer.onItemDestroyed.next(id);
-        }), finalize(() => {
-            this.observer.isDestoyingItem = false;
-        }));
+        return defer(() => {
+            this.observer.isDestoyingItem = true;
+            return this.http.delete(Util.armUrlWithSearchParams(Util.createEntityUrl(this.url, id), getParams), httpOptions);
+        }).pipe(tap(() => this.observer.onItemDestroyed.next(id)), finalize(() => this.observer.isDestoyingItem = false));
     }
     partialUpdate(model, getParams, httpOptions) {
-        this.observer.isPartiallyUpdatingItem = true;
-        return this.http.patch(Util.armUrlWithSearchParams(Util.createEntityUrl(this.url, model[this.identifier]), getParams), model, httpOptions).pipe(tap((result) => {
-            this.observer.onItemPartialUpdated.next(result);
-        }), finalize(() => {
-            this.observer.isPartiallyUpdatingItem = false;
-        }));
+        return defer(() => {
+            this.observer.isPartiallyUpdatingItem = true;
+            return this.http.patch(Util.armUrlWithSearchParams(Util.createEntityUrl(this.url, this.idVon(model)), getParams), model, httpOptions);
+        }).pipe(tap((result) => this.observer.onItemPartialUpdated.next(result)), finalize(() => this.observer.isPartiallyUpdatingItem = false));
     }
+    /** Legt an oder aktualisiert, je nachdem ob der Eintrag schon eine Id hat. */
     save(model, getParams, httpOptions) {
-        this.observer.isSavingItem = true;
-        let observable;
-        if (Util.isDefined(model[this.identifier])) {
-            observable = this.update(model, getParams, httpOptions);
-        }
-        else {
-            observable = this.create(model, getParams, httpOptions);
-        }
-        return observable
-            .pipe(tap((result) => {
-            this.observer.onItemSaved.next(result);
-        }), finalize(() => {
-            this.observer.isSavingItem = false;
-        }));
+        return defer(() => {
+            this.observer.isSavingItem = true;
+            return Util.isDefined(this.idVon(model)) ? this.update(model, getParams, httpOptions) : this.create(model, getParams, httpOptions);
+        }).pipe(tap((result) => this.observer.onItemSaved.next(result)), finalize(() => this.observer.isSavingItem = false));
     }
+    /** PUT auf die Basis-URL ohne Id, z. B. fuer Einstellungen, die es je Kontext nur einmal gibt. */
     set(model, getParams, httpOptions) {
-        this.observer.isSavingItem = true;
-        let observable;
-        this.observer.isUpdatingItem = true;
-        observable = this.http.put(Util.armUrlWithSearchParams(this.url, getParams), model, httpOptions).pipe(tap((result) => {
-            this.observer.onItemUpdated.next(result);
-        }), finalize(() => {
-            this.observer.isUpdatingItem = false;
-        }));
-        return observable
-            .pipe(tap((result) => {
-            this.observer.onItemSaved.next(result);
-        }), finalize(() => {
-            this.observer.isSavingItem = false;
-        }));
+        return defer(() => {
+            this.observer.isSavingItem = true;
+            this.observer.isUpdatingItem = true;
+            return this.http.put(Util.armUrlWithSearchParams(this.url, getParams), model, httpOptions).pipe(tap((result) => this.observer.onItemUpdated.next(result)), finalize(() => this.observer.isUpdatingItem = false));
+        }).pipe(tap((result) => this.observer.onItemSaved.next(result)), finalize(() => this.observer.isSavingItem = false));
     }
     update(model, getParams, httpOptions) {
-        this.observer.isUpdatingItem = true;
-        return this.http.put(Util.armUrlWithSearchParams(Util.createEntityUrl(this.url, model[this.identifier]), getParams), model, httpOptions).pipe(tap((result) => {
-            this.observer.onItemUpdated.next(result);
-        }), finalize(() => {
-            this.observer.isUpdatingItem = false;
-        }));
+        return defer(() => {
+            this.observer.isUpdatingItem = true;
+            return this.http.put(Util.armUrlWithSearchParams(Util.createEntityUrl(this.url, this.idVon(model)), getParams), model, httpOptions);
+        }).pipe(tap((result) => this.observer.onItemUpdated.next(result)), finalize(() => this.observer.isUpdatingItem = false));
+    }
+    idVon(model) {
+        return model[this.identifier];
     }
 }
 
@@ -764,29 +745,17 @@ class AbstractActivationGuard {
     }
 }
 
-class SubscriptionHandler {
-    onSuccess;
-    onError;
-    onFinished;
-    constructor(onSuccess, onError, onFinished) {
-        this.onSuccess = onSuccess;
-        this.onError = onError;
-        this.onFinished = onFinished;
-    }
-}
-
 /**
  * Fuehrt Guards schrittweise aus: die Guards eines Schritts parallel, die Schritte nacheinander. Schlaegt ein
- * Guard fehl, laufen die folgenden Schritte nicht mehr. In Routen als Klasse oder ueber
- * `mapToCanActivate([...])` aus `@angular/router` verwendbar.
+ * Guard fehl oder leitet um (`UrlTree`), laufen die folgenden Schritte nicht mehr; eine Umleitung wird an den Router
+ * weitergegeben. Bricht der Router die Navigation ab, werden laufende Guards abbestellt. Fehler gelten als `false`.
+ * In Routen als Klasse oder ueber `mapToCanActivate([...])` aus `@angular/router` verwendbar.
  */
 class AbstractActivationQueuedGuard {
     queue = [];
     injector = AbstractActivationQueuedGuard.currentInjector();
     canActivate(route, state) {
-        return new Observable((subscriber) => {
-            this.runQueueRecursive(0, route, state, subscriber);
-        });
+        return this.schritt(0, route, state);
     }
     sequence(step) {
         this.queue.push(_.isArray(step) ? step : [step]);
@@ -801,28 +770,22 @@ class AbstractActivationQueuedGuard {
             return null;
         }
     }
-    runQueueRecursive(level, route, state, subscriber) {
-        const currentQueueItems = this.queue[level];
-        if (!Util.isDefined(currentQueueItems)) {
-            subscriber.next(true);
-            subscriber.complete();
-            return;
+    schritt(level, route, state) {
+        if (level >= this.queue.length) {
+            return of(true);
         }
-        const activators = _.map(currentQueueItems, (step) => {
-            return this.asObservable(this.runStep(step, route, state));
-        });
-        SubscriptionManager.subscribe(forkJoin(activators), new SubscriptionHandler((canActivateStates) => {
-            if (!_.all(canActivateStates)) {
-                subscriber.next(false);
-                subscriber.complete();
+        const guards = this.queue[level];
+        if (guards.length === 0) {
+            return this.schritt(level + 1, route, state);
+        }
+        // defer: auch ein synchron werfender Guard endet als `false`, statt aus canActivate herauszufallen
+        return defer(() => forkJoin(guards.map((guard) => this.asObservable(this.runStep(guard, route, state)).pipe(take(1), defaultIfEmpty(false))))).pipe(switchMap((ergebnisse) => {
+            const umleitung = _.find(ergebnisse, (ergebnis) => ergebnis instanceof UrlTree);
+            if (umleitung) {
+                return of(umleitung);
             }
-            else {
-                this.runQueueRecursive(level + 1, route, state, subscriber);
-            }
-        }, () => {
-            subscriber.next(false);
-            subscriber.complete();
-        }));
+            return _.all(ergebnisse, (ergebnis) => !!ergebnis) ? this.schritt(level + 1, route, state) : of(false);
+        }), catchError(() => of(false)));
     }
     runStep(step, route, state) {
         if (typeof step !== 'function') {
@@ -835,7 +798,10 @@ class AbstractActivationQueuedGuard {
     }
     /** forkJoin braucht Observables; synchrone und Promise-Ergebnisse eines Guards werden daher umgewandelt. */
     asObservable(result) {
-        return isObservable(result) ? result : from(Promise.resolve(result));
+        if (isObservable(result)) {
+            return result;
+        }
+        return result instanceof Promise ? from(result) : of(result);
     }
 }
 
@@ -908,6 +874,17 @@ class AbstractRouteConfiguration {
 
 /** Fragt vor dem Verlassen einer Seite nach ungespeicherten Aenderungen; Komponenten ohne `canDeactivate` duerfen immer verlassen werden. */
 const deactivateGuard = (component) => component?.canDeactivate ? component.canDeactivate() : true;
+
+class SubscriptionHandler {
+    onSuccess;
+    onError;
+    onFinished;
+    constructor(onSuccess, onError, onFinished) {
+        this.onSuccess = onSuccess;
+        this.onError = onError;
+        this.onFinished = onFinished;
+    }
+}
 
 class BasePushStrategyObject extends BaseObject {
     markForCheckIf(subject) {
@@ -1511,16 +1488,19 @@ class AccessableFormControl {
     set value(value) {
         this.setValue(value);
     }
+    /** Liefert den umgewandelten Wert (`convertTo`); solange das Control blockiert ist, nichts. Abmelden beendet auch das innere Abo. */
     get valueChanges() {
-        return Observable.create((observer) => {
-            const sub = this.control.valueChanges
-                .subscribe(() => {
-                if (!this.blocked) {
-                    observer.next(this.value);
-                }
-            }, null, () => {
-                sub.unsubscribe();
+        return new Observable((observer) => {
+            const sub = this.control.valueChanges.subscribe({
+                next: () => {
+                    if (!this.blocked) {
+                        observer.next(this.value);
+                    }
+                },
+                error: (fehler) => observer.error(fehler),
+                complete: () => observer.complete()
             });
+            return () => sub.unsubscribe();
         });
     }
     get rawValue() {
@@ -1900,9 +1880,14 @@ class GermanDateTimeModule {
 (function () { (typeof ngJitMode === "undefined" || ngJitMode) && i0.ɵɵsetNgModuleScope(GermanDateTimeModule, { declarations: [GermanDateTimeDirective, DeutschesDatumPipe], exports: [GermanDateTimeDirective, DeutschesDatumPipe] }); })();
 
 class TypeConverter {
-    static DATE_REGEX = /(\d{2}).(\d{2}).(\d{4})/;
-    static DATE_REGEX_INPUT = /(\d{4})-(\d{2})-(\d{2})/;
-    /** Versucht den Wert in eine Zahl zu konvertieren. */
+    /** Deutsches Datum am Anfang des Textes, z. B. `07.11.2026` (auch mit folgender Uhrzeit) */
+    static DATE_REGEX = /^(\d{2})\.(\d{2})\.(\d{4})/;
+    /** ISO-Datum am Anfang des Textes, z. B. `2026-11-07` oder `2026-11-07T10:15:30` */
+    static DATE_REGEX_INPUT = /^(\d{4})-(\d{2})-(\d{2})/;
+    /**
+     * Versucht den Wert in eine Zahl zu konvertieren: `'1,5'` und `'1.5'` werden 1.5. Ein einzelner Punkt gilt als
+     * Dezimaltrennzeichen, Tausenderpunkte (`'1.234,5'`) werden nicht erkannt; solche Texte bleiben unveraendert.
+     */
     static toNumber(value) {
         // Falls null oder undefined übergeben wurde, brechen wir ab
         if (!value) {
@@ -1912,11 +1897,9 @@ class TypeConverter {
         if (_.isNumber(value)) {
             return value;
         }
-        // Falls der Wert ein String ist, testen wir, ob er aussieht wie eine Zahl und versuchen ihn anschließend zu konvertieren
         if (_.isString(value) && REGEX.NUMBER.test(value)) {
             return TypeConverter.convertInputStringToNumber(value);
         }
-        // Wir haben keine Regel für die Konvertierung gefunden
         return value;
     }
     /** Nimmt eine Zahl und gibt eine deutsche Representation dieses Wertes zurück */
@@ -1929,6 +1912,7 @@ class TypeConverter {
         }
         return value.toString().replace('.', ',');
     }
+    /** Deutsches oder ISO-Datum als Moment (Uhrzeit als UTC uebernommen); andere Texte bleiben unveraendert. */
     static toMoment(value) {
         if (value === null || value === undefined) {
             return undefined;
@@ -1941,7 +1925,7 @@ class TypeConverter {
                 return moment(value, 'DD.MM.YYYY').utc(true);
             }
             if (TypeConverter.DATE_REGEX_INPUT.test(value)) {
-                return moment(value, 'YYYY-MM-DDTHH:mm:SS').utc(true);
+                return moment(value, 'YYYY-MM-DDTHH:mm:ss').utc(true);
             }
         }
         return value;
@@ -1966,52 +1950,15 @@ class TypeConverter {
         }
         return withMilliseconds ? mDate.format('HH:mm:ss.SSS') : withSeconds ? mDate.format('HH:mm:ss') : mDate.format('HH:mm');
     }
-    /** Erzeugt ein moment object und setzt dieses auf UTC, falls dies noch nicht geschehen ist. */
-    /*public static utcDate(...args: any[]): moment.Moment {
-      const isDefined = _.every(args, (arg: any) => Util.isDefined(arg));
-      if (!isDefined) {
-        return undefined;
-      }
-      const mObject = moment(...args);
-      if (mObject.isUTC()) {
-        return mObject;
-      } else {
-        return mObject.utc(true);
-      }
-    }*/
-    /** Konvertiert ein moment Object in die lokale Zeitzone (Entfernt UTC) */
-    /*public static toLocalDate(mObject: moment.Moment): moment.Moment {
-      if (!Util.isDefined(mObject)) {
-        return undefined;
-      }
-      const param = moment(mObject);
-      if (param.isUTC()) {
-        return param.local(true);
-      } else {
-        return param;
-      }
-    }*/
     static booleanNumberToSting(n) {
         return n === 1 ? 'Ja' : 'Nein';
     }
-    /** Konvertiert ein Moment Object zu einem Date Object */
-    /*public static toJSDate(mObject: moment.Moment): Date {
-      const mDate = TypeConverter.utcDate(mObject);
-      if (!mDate) {
-        return undefined;
-      }
-      return mDate.toDate();
-    }*/
-    /** Kovertiert einen String in einen Regex um eine Volltextsuche zu ermöglichen */
+    /** Text als Suchmuster fuer eine Volltextsuche: Sonderzeichen werden maskiert, Gross-/Kleinschreibung zaehlt nicht. */
     static asRegex(text) {
-        let builderString = '';
         if (_.isEmpty(text)) {
-            return new RegExp(builderString);
+            return new RegExp('');
         }
-        _.each(text.split(''), (char) => {
-            builderString = builderString + `${char}`;
-        });
-        return new RegExp(builderString.replace(REGEX.SPECIAL_CHARS_REGEX, '\\$&'), 'i');
+        return new RegExp(text.replace(REGEX.SPECIAL_CHARS_REGEX, '\\$&'), 'i');
     }
     static booleanToNumber(bool) {
         return bool === true ? 1 : 0;
@@ -2027,7 +1974,7 @@ class TypeConverter {
         if (value.includes(',')) {
             return Number.parseFloat(value.replace(',', '.'));
         }
-        return Number.parseInt(value);
+        return Number.parseInt(value, 10);
     }
 }
 
@@ -2048,7 +1995,8 @@ class GermanFloatDirective {
         this.el = el;
     }
     ngOnChanges() {
-        this.el.nativeElement.innerHTML = Util.isDefined(this.appGermanFloat)
+        // textContent statt innerHTML: Texte, die keine Zahl sind, erscheinen unveraendert und duerfen kein HTML einschleusen
+        this.el.nativeElement.textContent = Util.isDefined(this.appGermanFloat)
             ? this.convert(this.appGermanFloat, this.tausendertrennzeichen, this.digits) ?? ''
             : '';
     }
@@ -2532,10 +2480,16 @@ class ItemStore {
     }
 }
 
+/**
+ * Store, dessen Eintraege nach `itemLifetimeInSeconds` als veraltet gelten (fuer gecachte REST-Services). Die
+ * Zeitstempel liegen im Store, nicht in den Eintraegen - sonst wuerden sie beim Speichern ans Backend mitgeschickt.
+ */
 class TimestampItemStore extends ItemStore {
     itemLifetimeInSeconds;
+    /** @deprecated Zeitstempel stehen nicht mehr in den Eintraegen; nur noch aus Kompatibilitaet vorhanden */
     static ITEM_TIMESTAMP_KEY = '__timestamp__';
     wasFilled;
+    zeitstempel = new Map();
     constructor(identifier, itemLifetimeInSeconds, transform) {
         super(identifier, transform);
         this.itemLifetimeInSeconds = itemLifetimeInSeconds;
@@ -2548,6 +2502,7 @@ class TimestampItemStore extends ItemStore {
     }
     clear() {
         super.clear();
+        this.zeitstempel.clear();
         this.wasFilled = false;
     }
     update(item) {
@@ -2558,31 +2513,32 @@ class TimestampItemStore extends ItemStore {
         super.push(item);
         this.trackItem(item);
     }
+    remove(item) {
+        super.remove(item);
+        if (item) {
+            this.zeitstempel.delete(String(this.identifierOf(item)));
+        }
+    }
+    removeByIdentifier(identifier) {
+        super.removeByIdentifier(identifier);
+        if (Util.isDefined(identifier)) {
+            this.zeitstempel.delete(String(identifier));
+        }
+    }
     isItemValid(identifier) {
-        let itemInStore = null;
-        for (const item of this.items) {
-            if (this.identifierOf(item) === identifier) {
-                itemInStore = item;
-                break;
-            }
-        }
-        if (!Util.isDefined(itemInStore)) {
-            return false;
-        }
-        const currentTimeStamp = Util.getCurrentUnixTimestamp();
-        return (currentTimeStamp - this.itemLifetimeInSeconds) < itemInStore[TimestampItemStore.ITEM_TIMESTAMP_KEY];
+        const zeitstempel = Util.isDefined(identifier) ? this.zeitstempel.get(String(identifier)) : undefined;
+        return Util.isDefined(zeitstempel) && (Util.getCurrentUnixTimestamp() - this.itemLifetimeInSeconds) < zeitstempel;
     }
     isStoreValid() {
-        if (!this.wasFilled) {
-            return false;
-        }
-        if (_.isEmpty(this.items)) {
+        if (!this.wasFilled || _.isEmpty(this.items)) {
             return false;
         }
         return _.all(this.items, (item) => this.isItemValid(this.identifierOf(item)));
     }
     trackItem(item) {
-        item[TimestampItemStore.ITEM_TIMESTAMP_KEY] = Util.getCurrentUnixTimestamp();
+        if (item) {
+            this.zeitstempel.set(String(this.identifierOf(item)), Util.getCurrentUnixTimestamp());
+        }
     }
 }
 
@@ -2657,7 +2613,8 @@ class ValidatorFloat {
             return null;
         }
         if (this.value && REGEX.ALL_NUMBERS.test(this.value.toString())) {
-            const numberSplitted = this.value.toString().replace('.', '').split(',');
+            // Alle Tausenderpunkte entfernen, nicht nur den ersten (1.234.567,8)
+            const numberSplitted = this.value.toString().replace(/\./g, '').split(',');
             if (Util.isDefined(this.digitsBefore) && this.digitsAfter === 0 && numberSplitted.length === 2) {
                 this.hasError = true;
                 this.error = 'Es sind keine Nachkommastellen erlaubt';
@@ -2665,7 +2622,7 @@ class ValidatorFloat {
             }
             if (numberSplitted.length !== 2) {
                 if (Util.isDefined(this.digitsBefore)) {
-                    if (this.value.length > this.digitsBefore) {
+                    if (numberSplitted[0].replace('-', '').length > this.digitsBefore) {
                         this.error = `Bitte runden Sie die Zahl auf ${this.digitsBefore === 1 ? 'eine Stelle' : this.digitsBefore.toString() + ' Stellen'} vor dem Komma`;
                         this.hasError = true;
                         return { invalidFloat: true };
@@ -2843,6 +2800,8 @@ class AccessableControlFactory {
             }
             return str;
         };
+        // Erst jetzt greift showAs, sonst erschiene der Startwert ungekuerzt
+        control.setValue(formState, true);
         return control;
     }
 }

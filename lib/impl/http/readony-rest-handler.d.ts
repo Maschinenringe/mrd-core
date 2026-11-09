@@ -2,6 +2,7 @@ import { Observable } from 'rxjs';
 import { HttpClient } from '@angular/common/http';
 import { IReadonlyRestService } from "../../interface/http/i-readonly-restservice";
 import { ReadonlyRestServiceObserver } from "./readonly-rest-service-observer";
+/** Fuehrt die Lesezugriffe eines REST-Services aus; die `isFetching...`-Flags gelten vom Abonnieren bis zum Ende des Requests. */
 export declare class ReadonlyRestHandler<T> implements IReadonlyRestService<T> {
     readonly http: HttpClient;
     readonly url: string;

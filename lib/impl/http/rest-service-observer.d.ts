@@ -3,7 +3,8 @@ import { Subject } from "rxjs";
 export declare class RestServiceObserver<T> extends ReadonlyRestServiceObserver<T> {
     readonly onItemCreated: Subject<T>;
     readonly onItemUpdated: Subject<T>;
-    readonly onItemDestroyed: Subject<T>;
+    /** Liefert die Id des geloeschten Eintrags, nicht den Eintrag */
+    readonly onItemDestroyed: Subject<any>;
     readonly onItemPartialUpdated: Subject<T>;
     readonly onItemSaved: Subject<T>;
     private isCreatingItem$;

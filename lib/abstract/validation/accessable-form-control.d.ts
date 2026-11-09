@@ -29,6 +29,7 @@ export declare class AccessableFormControl<TType = any> implements IAccessableFo
     get error(): IValidator | undefined;
     get value(): any;
     set value(value: any);
+    /** Liefert den umgewandelten Wert (`convertTo`); solange das Control blockiert ist, nichts. Abmelden beendet auch das innere Abo. */
     get valueChanges(): Observable<any>;
     get rawValue(): any;
     get rawValueAsType(): TType;

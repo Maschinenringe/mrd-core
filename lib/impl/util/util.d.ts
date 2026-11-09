@@ -15,11 +15,13 @@ export declare class Util {
      * Ansonsten wird true zurückgegeben, wenn das Objekt definiert ist, ansonsten false.
      */
     static isDefinedNotEmptyOrZero(obj: any, returnTheValueIfDefined?: boolean, undefinedReturnValue?: any): boolean | any;
+    /** Haengt Abfrage-Parameter unkodiert an die URL; Freitextwerte muss der Aufrufer selbst mit encodeURIComponent kodieren. */
     static armUrlWithSearchParams(url: string, queryParams?: object): string;
     static createEntityUrl(url: string, id: any): string;
     static getBrowser(): string;
     static getCurrentUnixTimestamp(): number;
     static guid(): string;
     private static transformUmlaute;
+    /** Sortiert nach einem Text-Attribut ohne Gross-/Kleinschreibung, Umlaute wie ae/oe/ue/ss; fehlende Werte zuerst. */
     static sortAlpabetically<TListType extends Record<string, any>>(list: TListType[], attribute: string): TListType[];
 }
